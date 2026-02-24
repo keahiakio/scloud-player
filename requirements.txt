@@ -1,0 +1,4 @@
+requests
+yt-dlp
+rich
+curl_cffi
