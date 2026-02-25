@@ -154,92 +154,110 @@ def play_track(track_info):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        soundcloud_url = sys.argv[1]
-    else:
-        soundcloud_url = Prompt.ask("[bold cyan]Please enter a SoundCloud URL[/bold cyan]")
-
-    tracks = get_track_data(soundcloud_url)
-
-    if tracks:
-        page_size = 15
-        current_page = 1
-        total_tracks = len(tracks)
-        total_pages = math.ceil(total_tracks / page_size)
-        current_track_index = -1 # -1 means no track is selected for autoplay yet
-
+    try:
+        # Use initial argument if provided
+        initial_url = sys.argv[1] if len(sys.argv) > 1 else None
+        
         while True:
-            clear_terminal()
-            display_tracks(tracks, current_page, page_size, total_tracks)
-            
-            # Adjust prompt based on whether autoplay is active or a track was just played
-            if current_track_index != -1 and current_track_index < total_tracks:
-                prompt_message = f"[bold yellow]Playing next: {tracks[current_track_index].get('title', 'Unknown')}...[/bold yellow]"
-                console.print(prompt_message)
-                time.sleep(1) 
-                
-                selected_track = tracks[current_track_index]
-                if play_track(selected_track):
-                    current_track_index += 1
-                    if (current_track_index % page_size) == 0 and (current_track_index // page_size) + 1 > current_page and current_page < total_pages:
-                        current_page += 1
-                        console.print(f"[bold green]Advancing to page {current_page}...[/bold green]")
-                        time.sleep(1)
-                    
-                    if current_track_index >= total_tracks:
-                        console.print("[bold yellow]End of playlist. Looping back to start.[/bold yellow]")
-                        current_page = 1
-                        current_track_index = 0
-                        time.sleep(1)
-                    continue
-                else:
-                    current_track_index = -1
-                    console.print("[bold red]Autoplay stopped due to playback issue.[/bold red]")
-                    time.sleep(2) 
-                    
-            
-            prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, or 'q' to quit[/bold yellow]"
-            choice_str = Prompt.ask(prompt_text)
-
-            if choice_str.lower() == 'q':
-                break
-            elif choice_str.lower() == 'n':
-                if current_page < total_pages:
-                    current_page += 1
-                    current_track_index = -1
-                else:
-                    console.print("[bold yellow]Already on the last page.[/bold yellow]")
-                    time.sleep(1)
-            elif choice_str.lower() == 'p':
-                if current_page > 1:
-                    current_page -= 1
-                    current_track_index = -1
-                else:
-                    console.print("[bold yellow]Already on the first page.[/bold red]")
-                    time.sleep(1)
-            elif choice_str.lower() == 's':
-                current_track_index = (current_page - 1) * page_size
-                if current_track_index < total_tracks:
-                    console.print(f"[bold green]Starting autoplay from track {current_track_index + 1}...[/bold green]")
-                    time.sleep(1)
-                    continue
-                else:
-                    console.print("[bold red]No tracks available to start autoplay.[/bold red]")
-                    time.sleep(1)
+            if initial_url:
+                soundcloud_url = initial_url
+                initial_url = None # Only use it once
             else:
                 try:
-                    choice = int(choice_str)
-                    absolute_choice_index = choice - 1 
+                    soundcloud_url = Prompt.ask("[bold cyan]Please enter a SoundCloud URL[/bold cyan]")
+                except EOFError:
+                    break
 
-                    if 0 <= absolute_choice_index < total_tracks:
-                        selected_track = tracks[absolute_choice_index]
-                        play_track(selected_track)
-                        current_track_index = -1
+            if not soundcloud_url:
+                continue
+
+            tracks = get_track_data(soundcloud_url)
+
+            if tracks:
+                page_size = 15
+                current_page = 1
+                total_tracks = len(tracks)
+                total_pages = math.ceil(total_tracks / page_size)
+                current_track_index = -1 # -1 means no track is selected for autoplay yet
+
+                while True:
+                    clear_terminal()
+                    display_tracks(tracks, current_page, page_size, total_tracks)
+                    
+                    # Adjust prompt based on whether autoplay is active or a track was just played
+                    if current_track_index != -1 and current_track_index < total_tracks:
+                        prompt_message = f"[bold yellow]Playing next: {tracks[current_track_index].get('title', 'Unknown')}...[/bold yellow]"
+                        console.print(prompt_message)
+                        time.sleep(1) 
+                        
+                        selected_track = tracks[current_track_index]
+                        if play_track(selected_track):
+                            current_track_index += 1
+                            if (current_track_index % page_size) == 0 and (current_track_index // page_size) + 1 > current_page and current_page < total_pages:
+                                current_page += 1
+                                console.print(f"[bold green]Advancing to page {current_page}...[/bold green]")
+                                time.sleep(1)
+                            
+                            if current_track_index >= total_tracks:
+                                console.print("[bold yellow]End of playlist. Looping back to start.[/bold yellow]")
+                                current_page = 1
+                                current_track_index = 0
+                                time.sleep(1)
+                            continue
+                        else:
+                            current_track_index = -1
+                            console.print("[bold red]Autoplay stopped due to playback issue.[/bold red]")
+                            time.sleep(2) 
+                            
+                    
+                    prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, or 'q' to go back[/bold yellow]"
+                    try:
+                        choice_str = Prompt.ask(prompt_text)
+                    except EOFError:
+                        break
+
+                    if choice_str.lower() == 'q':
+                        break # Back to URL prompt
+                    elif choice_str.lower() == 'n':
+                        if current_page < total_pages:
+                            current_page += 1
+                            current_track_index = -1
+                        else:
+                            console.print("[bold yellow]Already on the last page.[/bold yellow]")
+                            time.sleep(1)
+                    elif choice_str.lower() == 'p':
+                        if current_page > 1:
+                            current_page -= 1
+                            current_track_index = -1
+                        else:
+                            console.print("[bold yellow]Already on the first page.[/bold red]")
+                            time.sleep(1)
+                    elif choice_str.lower() == 's':
+                        current_track_index = (current_page - 1) * page_size
+                        if current_track_index < total_tracks:
+                            console.print(f"[bold green]Starting autoplay from track {current_track_index + 1}...[/bold green]")
+                            time.sleep(1)
+                            continue
+                        else:
+                            console.print("[bold red]No tracks available to start autoplay.[/bold red]")
+                            time.sleep(1)
                     else:
-                        console.print("[bold red]Invalid track number.[/bold red]")
-                        time.sleep(1)
-                except ValueError:
-                    console.print("[bold red]Please enter a valid number, 'n', 'p', 's', or 'q'.[/bold red]")
-                    time.sleep(1)
-    else:
-        console.print("[bold red]No tracks were loaded. Exiting.[/bold red]")
+                        try:
+                            choice = int(choice_str)
+                            absolute_choice_index = choice - 1 
+
+                            if 0 <= absolute_choice_index < total_tracks:
+                                selected_track = tracks[absolute_choice_index]
+                                play_track(selected_track)
+                                current_track_index = -1
+                            else:
+                                console.print("[bold red]Invalid track number.[/bold red]")
+                                time.sleep(1)
+                        except ValueError:
+                            console.print("[bold red]Please enter a valid number, 'n', 'p', 's', or 'q'.[/bold red]")
+                            time.sleep(1)
+            else:
+                console.print("[bold red]No tracks were loaded.[/bold red]")
+    except KeyboardInterrupt:
+        console.print("\n[bold red]Exiting scloud-player...[/bold red]")
+        sys.exit(0)
