@@ -1,3 +1,4 @@
+#!/home/keahiakio/scloud-player/venv/bin/python
 import subprocess
 import json
 import sys
