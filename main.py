@@ -56,12 +56,23 @@ def setup_readline():
     
     # Set history length
     readline.set_history_length(1000)
+    # Standard Emacs-like bindings (Up/Down for history) are default in most readline builds
     import atexit
     atexit.register(readline.write_history_file, HISTORY_FILE)
 
 def clear_terminal():
     """Clears the terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    console.clear()
+
+def get_user_input(prompt_text):
+    """Gets user input using console.print and input() to avoid readline/rich conflicts."""
+    console.print(prompt_text, end=": ")
+    try:
+        return input().strip()
+    except EOFError:
+        return "q"
+    except KeyboardInterrupt:
+        raise
 
 def format_duration(seconds):
     """Formats duration in seconds to MM:SS or HH:MM:SS."""
@@ -217,9 +228,8 @@ if __name__ == "__main__":
                 soundcloud_url = initial_url
                 initial_url = None # Only use it once
             else:
-                try:
-                    soundcloud_url = Prompt.ask("[bold cyan]Please enter a SoundCloud URL[/bold cyan]")
-                except EOFError:
+                soundcloud_url = get_user_input("[bold cyan]Please enter a SoundCloud URL[/bold cyan]")
+                if soundcloud_url.lower() == "q":
                     break
 
             if not soundcloud_url:
@@ -272,10 +282,7 @@ if __name__ == "__main__":
                             
                     
                     prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, 'sh' to toggle shuffle, or 'q' to go back[/bold yellow]"
-                    try:
-                        choice_str = Prompt.ask(prompt_text)
-                    except EOFError:
-                        break
+                    choice_str = get_user_input(prompt_text)
 
                     if choice_str.lower() == 'q':
                         break # Back to URL prompt
