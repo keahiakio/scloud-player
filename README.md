@@ -75,7 +75,7 @@ Follow these steps to use the SoundCloud Player script:
     ┡━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
     │ ...   │                                                           │ N/A      │ N/A      │
     └───────┴───────────────────────────────────────────────────────────┴──────────┴──────────┘
-    Enter track number, 'n' for next, 'p' for previous, 's' to start autoplay, or 'q' to quit:
+    Enter track number, 'n' for next, 'p' for previous, 's' to start autoplay, or 'q' to go back:
     ```
     **Note on Uploader/Duration:** For faster loading of the track list, the 'Uploader' and 'Duration' columns in the table initially show "N/A". The full uploader name and accurate duration will be fetched and displayed in the "Playing:" message when you select and play a specific track.
 
@@ -84,7 +84,8 @@ Follow these steps to use the SoundCloud Player script:
     *   Enter `n` (or `N`) to go to the **next page**.
     *   Enter `p` (or `P`) to go to the **previous page**.
     *   Enter `s` (or `S`) to **start autoplay** from the first track of the current page.
-    *   Enter `q` (or `Q`) to **quit** the script.
+    *   Enter `q` (or `Q`) to **go back** to the URL entry prompt.
+    *   Press `Ctrl+C` to **exit** the program completely.
 
 5.  **Enjoy the music!**
     When you select a track, the script will first fetch its full details (including uploader and duration) and display them, then launch `mpv` to play the audio. `mpv` will take over your terminal during playback. After the track finishes (or you close `mpv`), the script will return to the track selection prompt.
