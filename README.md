@@ -1,4 +1,44 @@
-To use the SoundCloud Player script, follow these steps:
+# SoundCloud Player
+
+A simple terminal-based SoundCloud player using `yt-dlp` and `mpv`.
+
+## Installation
+
+Follow these steps to set up the SoundCloud Player:
+
+### 1. Prerequisites
+
+Ensure you have the following installed on your system:
+- **Python 3**: The scripting language.
+- **mpv**: The media player used for audio playback.
+  - On Debian/Ubuntu: `sudo apt install mpv`
+
+### 2. Clone the Repository
+
+```bash
+git clone https://github.com/keahiakio/scloud-player.git
+cd scloud-player
+```
+
+### 3. Set Up a Virtual Environment
+
+It's recommended to use a virtual environment to manage dependencies:
+
+```bash
+python3 -m venv venv
+```
+
+### 4. Install Dependencies
+
+Install the required Python packages into the virtual environment:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+```
+
+## Usage
+
+Follow these steps to use the SoundCloud Player script:
 
 1.  **Navigate to the project directory:**
     ```bash
@@ -9,7 +49,7 @@ To use the SoundCloud Player script, follow these steps:
     ```bash
     ./venv/bin/python main.py
     ```
-    Alternatively, you can make the script executable and run it directly:
+    Alternatively, you can make the script executable and run it directly (if your shebang matches your environment):
     ```bash
     chmod +x main.py
     ./main.py
