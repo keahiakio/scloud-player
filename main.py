@@ -7,6 +7,7 @@ import os
 import time
 import random
 import readline
+import re
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt
@@ -60,15 +61,31 @@ def setup_readline():
     import atexit
     atexit.register(readline.write_history_file, HISTORY_FILE)
 
+import re
+
 def clear_terminal():
     """Clears the terminal screen."""
     console.clear()
 
+def ansi_to_readline(ansi_str):
+    """
+    Wraps ANSI escape sequences in \001 and \002 so readline
+    can correctly calculate the prompt length.
+    """
+    return re.sub(r'(\x1b\[[0-9;]*m)', r'\001\1\002', ansi_str)
+
 def get_user_input(prompt_text):
-    """Gets user input using console.print and input() to avoid readline/rich conflicts."""
-    console.print(prompt_text, end=": ")
+    """Gets user input with correct readline handling for rich-formatted prompts."""
+    # Render the rich markup to an ANSI string
+    with console.capture() as capture:
+        console.print(prompt_text, end=": ")
+    ansi_prompt = capture.get()
+    
+    # Wrap for readline and use as input() prompt
+    readline_prompt = ansi_to_readline(ansi_prompt)
+    
     try:
-        return input().strip()
+        return input(readline_prompt).strip()
     except EOFError:
         return "q"
     except KeyboardInterrupt:
