@@ -90,6 +90,25 @@ Follow these steps to use the SoundCloud Player script:
 5.  **Enjoy the music!**
     When you select a track, the script will first fetch its full details (including uploader and duration) and display them, then launch `mpv` to play the audio. `mpv` will take over your terminal during playback. After the track finishes (or you close `mpv`), the script will return to the track selection prompt.
 
+## Global Execution
+
+To run `scloud-player` from any directory in your terminal, you can create a symlink in your local bin directory:
+
+1.  **Make the script executable:**
+    ```bash
+    chmod +x ~/scloud-player/main.py
+    ```
+
+2.  **Create a symlink:**
+    ```bash
+    ln -s ~/scloud-player/main.py ~/.local/bin/scloud-player
+    ```
+
+3.  **Verify your PATH:**
+    Ensure `~/.local/bin` is in your `$PATH` environment variable. You can check this by running `echo $PATH`. If it's not there, you may need to add it to your `.bashrc` or `.config/fish/config.fish`.
+
+Now you can just run `scloud-player` from anywhere!
+
 **Troubleshooting:**
 
 *   **`yt-dlp` or `mpv` not found:** Ensure both `yt-dlp` and `mpv` are installed on your system and available in your PATH. If you encounter issues with `yt-dlp`, you might need to install `curl_cffi` manually into the virtual environment (`./venv/bin/pip install curl_cffi`).
