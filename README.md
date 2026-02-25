@@ -36,6 +36,14 @@ Install the required Python packages into the virtual environment:
 ./venv/bin/pip install -r requirements.txt
 ```
 
+## Configuration
+
+The script stores its settings in `~/.scloud-player-config.json`. You can manually edit this file to change:
+- `player`: Either `mpv` (default) or `vlc`.
+- `autoplay`: Set to `true` to start playing automatically when a URL is loaded.
+- `shuffle`: Set to `true` to shuffle tracks on load.
+- `page_size`: Number of tracks displayed per page.
+
 ## Usage
 
 Follow these steps to use the SoundCloud Player script:
@@ -56,35 +64,19 @@ Follow these steps to use the SoundCloud Player script:
     ```
 
 3.  **Enter a SoundCloud URL:**
-    The script will prompt you to enter a SoundCloud URL. This can be a link to:
-    *   A user's "likes" page (e.g., `https://soundcloud.com/keahiakio/likes`)
-    *   A user's "posts" page (e.g., `https://soundcloud.com/user/tracks`)
-    *   A public playlist (e.g., `https://soundcloud.com/monstercat/sets/call-of-the-wild-275`)
-    *   The SoundCloud discover page (e.g., `https://soundcloud.com/discover`)
-
-    Example:
-    ```
-    Please enter a SoundCloud URL: https://soundcloud.com/keahiakio/likes
-    ```
+    The script will prompt you to enter a SoundCloud URL.
+    *   **Input History:** You can use the **Up/Down arrow keys** to scroll through your previous URL and track selection entries.
 
 4.  **Navigate and select a track:**
-    The script will display a paginated list of tracks (15 songs per page).
-    ```
-                                     Select a Track (Page X/Y)                                     
-    ┏━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┓
-    ┡━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
-    │ ...   │                                                           │ N/A      │ N/A      │
-    └───────┴───────────────────────────────────────────────────────────┴──────────┴──────────┘
-    Enter track number, 'n' for next, 'p' for previous, 's' to start autoplay, or 'q' to go back:
-    ```
-    **Note on Uploader/Duration:** For faster loading of the track list, the 'Uploader' and 'Duration' columns in the table initially show "N/A". The full uploader name and accurate duration will be fetched and displayed in the "Playing:" message when you select and play a specific track.
+    The script will display a paginated list of tracks.
 
     You have the following options:
     *   Enter a **track number** (e.g., `6`) to play the corresponding song.
-    *   Enter `n` (or `N`) to go to the **next page**.
-    *   Enter `p` (or `P`) to go to the **previous page**.
-    *   Enter `s` (or `S`) to **start autoplay** from the first track of the current page.
-    *   Enter `q` (or `Q`) to **go back** to the URL entry prompt.
+    *   Enter `n` to go to the **next page**.
+    *   Enter `p` to go to the **previous page**.
+    *   Enter `s` to **start autoplay** from the first track of the current page.
+    *   Enter `sh` to **toggle shuffle** mode (saves to config).
+    *   Enter `q` to **go back** to the URL entry prompt.
     *   Press `Ctrl+C` to **exit** the program completely.
 
 5.  **Enjoy the music!**

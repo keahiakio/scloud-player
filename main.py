@@ -1,16 +1,62 @@
-#!/home/keahiakio/scloud-player/venv/bin/python
-
 import subprocess
 import json
 import sys
 import math
 import os
 import time
+import random
+import readline
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt
 
 console = Console() # Initialize console globally
+
+CONFIG_FILE = os.path.expanduser("~/.scloud-player-config.json")
+HISTORY_FILE = os.path.expanduser("~/.scloud-player-history")
+
+DEFAULT_CONFIG = {
+    "player": "mpv",
+    "autoplay": False,
+    "shuffle": False,
+    "page_size": 15
+}
+
+def load_config():
+    """Loads configuration from file or returns default."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                # Ensure all default keys exist
+                for k, v in DEFAULT_CONFIG.items():
+                    if k not in config:
+                        config[k] = v
+                return config
+        except Exception as e:
+            console.print(f"[bold red]Error loading config: {e}. Using defaults.[/bold red]")
+    return DEFAULT_CONFIG.copy()
+
+def save_config(config):
+    """Saves configuration to file."""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        console.print(f"[bold red]Error saving config: {e}[/bold red]")
+
+def setup_readline():
+    """Sets up readline for input history."""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            readline.read_history_file(HISTORY_FILE)
+        except Exception:
+            pass
+    
+    # Set history length
+    readline.set_history_length(1000)
+    import atexit
+    atexit.register(readline.write_history_file, HISTORY_FILE)
 
 def clear_terminal():
     """Clears the terminal screen."""
@@ -119,9 +165,9 @@ def get_stream_url(track_url):
         console.print("Please install it to use this script (e.g., 'pip install yt-dlp').")
         sys.exit(1)
 
-def play_track(track_info):
+def play_track(track_info, player="mpv"):
     """
-    Plays a stream URL with mpv. Fetches full track info right before playing.
+    Plays a stream URL with the selected player. Fetches full track info right before playing.
     Returns True if playback was successful, False if interrupted or an error occurs.
     """
     # Fetch full track info for the selected track to get accurate uploader/title
@@ -142,18 +188,25 @@ def play_track(track_info):
     console.print(f"\n[bold green]Playing:[/bold green] [yellow]{title}[/yellow] by [green]{uploader}[/green] ([blue]{duration_str}[/blue])\n[dim]Link:[/dim] [link={full_info.get('webpage_url', track_info.get('url'))}]{full_info.get('webpage_url', track_info.get('url'))}[/link]")
     
     try:
-        subprocess.run(["mpv", stream_url], check=True)
+        if player.lower() == "vlc":
+            # Using cvlc for terminal-based VLC
+            subprocess.run(["cvlc", "--play-and-exit", stream_url], check=True)
+        else:
+            subprocess.run(["mpv", stream_url], check=True)
         return True
     except subprocess.CalledProcessError as e:
-        console.print(f"[bold red]mpv playback interrupted or failed: {e}[/bold red]")
+        console.print(f"[bold red]{player} playback interrupted or failed: {e}[/bold red]")
         return False
     except FileNotFoundError:
-        console.print("[bold red]Error: 'mpv' is not installed or not in your PATH.[/bold red]")
-        console.print("Please install it to play tracks.")
+        console.print(f"[bold red]Error: '{player}' is not installed or not in your PATH.[/bold red]")
+        console.print(f"Please install it to play tracks.")
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    setup_readline()
+    config = load_config()
+    
     try:
         # Use initial argument if provided
         initial_url = sys.argv[1] if len(sys.argv) > 1 else None
@@ -174,11 +227,18 @@ if __name__ == "__main__":
             tracks = get_track_data(soundcloud_url)
 
             if tracks:
-                page_size = 15
+                if config.get("shuffle", False):
+                    random.shuffle(tracks)
+                    console.print("[bold cyan]Shuffle enabled: tracks shuffled.[/bold cyan]")
+                    time.sleep(1)
+
+                page_size = config.get("page_size", 15)
                 current_page = 1
                 total_tracks = len(tracks)
                 total_pages = math.ceil(total_tracks / page_size)
-                current_track_index = -1 # -1 means no track is selected for autoplay yet
+                
+                # If autoplay is enabled in config, start from first track
+                current_track_index = 0 if config.get("autoplay", False) else -1
 
                 while True:
                     clear_terminal()
@@ -191,7 +251,7 @@ if __name__ == "__main__":
                         time.sleep(1) 
                         
                         selected_track = tracks[current_track_index]
-                        if play_track(selected_track):
+                        if play_track(selected_track, player=config.get("player", "mpv")):
                             current_track_index += 1
                             if (current_track_index % page_size) == 0 and (current_track_index // page_size) + 1 > current_page and current_page < total_pages:
                                 current_page += 1
@@ -199,18 +259,18 @@ if __name__ == "__main__":
                                 time.sleep(1)
                             
                             if current_track_index >= total_tracks:
-                                console.print("[bold yellow]End of playlist. Looping back to start.[/bold yellow]")
+                                console.print("[bold yellow]End of tracks. Looping back to start.[/bold yellow]")
                                 current_page = 1
                                 current_track_index = 0
                                 time.sleep(1)
                             continue
                         else:
                             current_track_index = -1
-                            console.print("[bold red]Autoplay stopped due to playback issue.[/bold red]")
+                            console.print("[bold red]Autoplay/Selection stopped due to playback issue.[/bold red]")
                             time.sleep(2) 
                             
                     
-                    prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, or 'q' to go back[/bold yellow]"
+                    prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, 'sh' to toggle shuffle, or 'q' to go back[/bold yellow]"
                     try:
                         choice_str = Prompt.ask(prompt_text)
                     except EOFError:
@@ -241,6 +301,12 @@ if __name__ == "__main__":
                         else:
                             console.print("[bold red]No tracks available to start autoplay.[/bold red]")
                             time.sleep(1)
+                    elif choice_str.lower() == 'sh':
+                        config["shuffle"] = not config.get("shuffle", False)
+                        save_config(config)
+                        status = "enabled" if config["shuffle"] else "disabled"
+                        console.print(f"[bold cyan]Shuffle {status}. (Takes effect on next URL load)[/bold cyan]")
+                        time.sleep(1)
                     else:
                         try:
                             choice = int(choice_str)
@@ -248,13 +314,16 @@ if __name__ == "__main__":
 
                             if 0 <= absolute_choice_index < total_tracks:
                                 selected_track = tracks[absolute_choice_index]
-                                play_track(selected_track)
-                                current_track_index = -1
+                                if play_track(selected_track, player=config.get("player", "mpv")):
+                                    # If they manually picked one, we don't necessarily start autoplay unless they want to
+                                    current_track_index = -1
+                                else:
+                                    current_track_index = -1
                             else:
                                 console.print("[bold red]Invalid track number.[/bold red]")
                                 time.sleep(1)
                         except ValueError:
-                            console.print("[bold red]Please enter a valid number, 'n', 'p', 's', or 'q'.[/bold red]")
+                            console.print("[bold red]Please enter a valid number, 'n', 'p', 's', 'sh', or 'q'.[/bold red]")
                             time.sleep(1)
             else:
                 console.print("[bold red]No tracks were loaded.[/bold red]")
