@@ -75,6 +75,7 @@ Follow these steps to use the SoundCloud Player script:
     *   Enter `n` to go to the **next page**.
     *   Enter `p` to go to the **previous page**.
     *   Enter `s` to **start autoplay** from the first track of the current page.
+    *   Enter `ap` to **toggle autoplay** mode (saves to config).
     *   Enter `sh` to **toggle shuffle** mode (saves to config).
     *   Enter `q` to **go back** to the URL entry prompt.
     *   Press `Ctrl+C` to **exit** the program completely.

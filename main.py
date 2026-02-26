@@ -298,7 +298,7 @@ if __name__ == "__main__":
                             time.sleep(2) 
                             
                     
-                    prompt_text = "[bold yellow]Enter track number, 'n' for next page, 'p' for previous page, 's' to start autoplay, 'sh' to toggle shuffle, or 'q' to go back[/bold yellow]"
+                    prompt_text = "[bold yellow]Enter track number, 'n' next, 'p' prev, 's' start, 'ap' autoplay, 'sh' shuffle, 'q' back[/bold yellow]"
                     choice_str = get_user_input(prompt_text)
 
                     if choice_str.lower() == 'q':
@@ -331,6 +331,14 @@ if __name__ == "__main__":
                         save_config(config)
                         status = "enabled" if config["shuffle"] else "disabled"
                         console.print(f"[bold cyan]Shuffle {status}. (Takes effect on next URL load)[/bold cyan]")
+                        time.sleep(1)
+                    elif choice_str.lower() == 'ap':
+                        config["autoplay"] = not config.get("autoplay", False)
+                        save_config(config)
+                        status = "enabled" if config["autoplay"] else "disabled"
+                        console.print(f"[bold cyan]Autoplay {status}.[/bold cyan]")
+                        if not config["autoplay"]:
+                            current_track_index = -1
                         time.sleep(1)
                     else:
                         try:
