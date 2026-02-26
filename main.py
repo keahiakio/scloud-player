@@ -235,6 +235,8 @@ def play_track(track_info, player="mpv"):
 if __name__ == "__main__":
     setup_readline()
     config = load_config()
+    # Ensure autoplay always starts as False for a new session
+    config["autoplay"] = False
     
     try:
         # Use initial argument if provided
@@ -334,10 +336,13 @@ if __name__ == "__main__":
                         time.sleep(1)
                     elif choice_str.lower() == 'ap':
                         config["autoplay"] = not config.get("autoplay", False)
-                        save_config(config)
                         status = "enabled" if config["autoplay"] else "disabled"
                         console.print(f"[bold cyan]Autoplay {status}.[/bold cyan]")
-                        if not config["autoplay"]:
+                        if config["autoplay"]:
+                            # If enabling, start from the first track of current page
+                            current_track_index = (current_page - 1) * page_size
+                        else:
+                            # If disabling, stop the autoplay chain
                             current_track_index = -1
                         time.sleep(1)
                     else:
