@@ -61,8 +61,6 @@ def setup_readline():
     import atexit
     atexit.register(readline.write_history_file, HISTORY_FILE)
 
-import re
-
 def clear_terminal():
     """Clears the terminal screen."""
     console.clear()
@@ -405,11 +403,6 @@ if __name__ == "__main__":
                         except ValueError:
                             console.print("[bold red]Please enter a valid number, 'n', 'p', 's', 'sh', or 'q'.[/bold red]")
                             time.sleep(1)
-            else:
-                console.print("[bold red]No tracks were loaded.[/bold red]")
-    except KeyboardInterrupt:
-        console.print("\n[bold red]Exiting scloud-player...[/bold red]")
-        sys.exit(0)
             else:
                 console.print("[bold red]No tracks were loaded.[/bold red]")
     except KeyboardInterrupt:
