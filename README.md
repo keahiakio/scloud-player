@@ -81,7 +81,16 @@ Follow these steps to use the SoundCloud Player script:
     *   Press `Ctrl+C` to **exit** the program completely.
 
 5.  **Enjoy the music!**
-    When you select a track, the script will first fetch its full details (including uploader and duration) and display them, then launch `mpv` to play the audio. `mpv` will take over your terminal during playback. After the track finishes (or you close `mpv`), the script will return to the track selection prompt.
+    When you select a track, the script will first fetch its full details (including uploader and duration) and display them, then launch `mpv` to play the audio. `mpv` will take over your terminal during playback.
+
+    **While playing (mpv only):**
+    *   Press **`a`** to stop the current song and **disable autoplay** for the rest of the session.
+    *   Standard `mpv` keys (like `space` for pause, `q` to quit the song) still work.
+
+    **Between tracks (Autoplay Intermission):**
+    *   When autoplay is active, a 3-second countdown will appear before the next track.
+    *   Press **`q`** during this countdown to stop autoplay and return to the menu.
+    *   Press any other key to skip the countdown and play the next track immediately.
 
 ## Global Execution
 

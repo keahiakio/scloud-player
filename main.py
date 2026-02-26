@@ -197,17 +197,20 @@ def get_stream_url(track_url):
 def play_track(track_info, player="mpv"):
     """
     Plays a stream URL with the selected player. Fetches full track info right before playing.
-    Returns True if playback was successful, False if interrupted or an error occurs.
+    Returns:
+        0: Success (song finished normally)
+        4: Autoplay Toggle (user pressed 'a' in mpv)
+        -1: Interrupted/Error
     """
     # Fetch full track info for the selected track to get accurate uploader/title
     full_info = get_full_track_info(track_info['url'])
     if not full_info:
         console.print(f"[bold red]Could not get full info for {track_info.get('title', 'selected track')}.[/bold red]")
-        return False
+        return -1
     
     stream_url = get_stream_url(full_info['webpage_url']) # Use webpage_url for stream
     if not stream_url:
-        return False
+        return -1
 
     title = full_info.get('title', 'Unknown Title')
     uploader = full_info.get('uploader', 'Unknown Uploader')
@@ -216,21 +219,48 @@ def play_track(track_info, player="mpv"):
 
     console.print(f"\n[bold green]Playing:[/bold green] [yellow]{title}[/yellow] by [green]{uploader}[/green] ([blue]{duration_str}[/blue])\n[dim]Link:[/dim] [link={full_info.get('webpage_url', track_info.get('url'))}]{full_info.get('webpage_url', track_info.get('url'))}[/link]")
     
+    # Create a temporary input config for mpv to allow 'a' to quit with a specific exit code
+    input_conf = os.path.expanduser("~/.cache/scloud-player-input.conf")
+    os.makedirs(os.path.dirname(input_conf), exist_ok=True)
+    with open(input_conf, "w") as f:
+        f.write("a quit 4\n")
+
     try:
         if player.lower() == "vlc":
             # Using cvlc for terminal-based VLC
             subprocess.run(["cvlc", "--play-and-exit", stream_url], check=True)
         else:
-            subprocess.run(["mpv", stream_url], check=True)
-        return True
+            # Pass the custom input config to mpv
+            result = subprocess.run(["mpv", f"--input-conf={input_conf}", stream_url], check=False)
+            if result.returncode == 4:
+                console.print("[bold cyan]Autoplay disabled via 'a' key.[/bold cyan]")
+                return 4
+            elif result.returncode != 0:
+                return -1
+        return 0
     except subprocess.CalledProcessError as e:
         console.print(f"[bold red]{player} playback interrupted or failed: {e}[/bold red]")
-        return False
+        return -1
     except FileNotFoundError:
         console.print(f"[bold red]Error: '{player}' is not installed or not in your PATH.[/bold red]")
         console.print(f"Please install it to play tracks.")
         sys.exit(1)
 
+def intermission(next_track_title):
+    """Shows a brief countdown between autoplay tracks, allowing the user to cancel."""
+    import select
+    console.print(f"\n[bold yellow]Up Next: {next_track_title}[/bold yellow]")
+    for i in range(3, 0, -1):
+        console.print(f"[bold yellow]Starting in {i}s... (Press 'q' to stop autoplay, any other key to play now)[/bold yellow]\r", end="")
+        rlist, _, _ = select.select([sys.stdin], [], [], 1)
+        if rlist:
+            char = sys.stdin.read(1).lower()
+            if char == 'q':
+                console.print("\n[bold cyan]Autoplay stopped.[/bold cyan]")
+                return False
+            break
+    console.print("") # New line after countdown
+    return True
 
 if __name__ == "__main__":
     setup_readline()
@@ -276,13 +306,17 @@ if __name__ == "__main__":
                     
                     # Adjust prompt based on whether autoplay is active or a track was just played
                     if current_track_index != -1 and current_track_index < total_tracks:
-                        prompt_message = f"[bold yellow]Playing next: {tracks[current_track_index].get('title', 'Unknown')}...[/bold yellow]"
-                        console.print(prompt_message)
-                        time.sleep(1) 
-                        
                         selected_track = tracks[current_track_index]
-                        if play_track(selected_track, player=config.get("player", "mpv")):
+                        play_status = play_track(selected_track, player=config.get("player", "mpv"))
+                        
+                        if play_status == 4: # User toggled 'ap' off during song
+                            config["autoplay"] = False
+                            current_track_index = -1
+                            time.sleep(1)
+                            continue
+                        elif play_status == 0: # Success
                             current_track_index += 1
+                            
                             if (current_track_index % page_size) == 0 and (current_track_index // page_size) + 1 > current_page and current_page < total_pages:
                                 current_page += 1
                                 console.print(f"[bold green]Advancing to page {current_page}...[/bold green]")
@@ -293,6 +327,14 @@ if __name__ == "__main__":
                                 current_page = 1
                                 current_track_index = 0
                                 time.sleep(1)
+                            
+                            # Intermission before next song if autoplay is still on
+                            if config.get("autoplay", False):
+                                next_title = tracks[current_track_index].get('title', 'Unknown')
+                                if not intermission(next_title):
+                                    config["autoplay"] = False
+                                    current_track_index = -1
+                                    time.sleep(1)
                             continue
                         else:
                             current_track_index = -1
@@ -324,6 +366,7 @@ if __name__ == "__main__":
                         if current_track_index < total_tracks:
                             console.print(f"[bold green]Starting autoplay from track {current_track_index + 1}...[/bold green]")
                             time.sleep(1)
+                            config["autoplay"] = True
                             continue
                         else:
                             console.print("[bold red]No tracks available to start autoplay.[/bold red]")
@@ -352,8 +395,7 @@ if __name__ == "__main__":
 
                             if 0 <= absolute_choice_index < total_tracks:
                                 selected_track = tracks[absolute_choice_index]
-                                if play_track(selected_track, player=config.get("player", "mpv")):
-                                    # If they manually picked one, we don't necessarily start autoplay unless they want to
+                                if play_track(selected_track, player=config.get("player", "mpv")) == 0:
                                     current_track_index = -1
                                 else:
                                     current_track_index = -1
@@ -363,6 +405,11 @@ if __name__ == "__main__":
                         except ValueError:
                             console.print("[bold red]Please enter a valid number, 'n', 'p', 's', 'sh', or 'q'.[/bold red]")
                             time.sleep(1)
+            else:
+                console.print("[bold red]No tracks were loaded.[/bold red]")
+    except KeyboardInterrupt:
+        console.print("\n[bold red]Exiting scloud-player...[/bold red]")
+        sys.exit(0)
             else:
                 console.print("[bold red]No tracks were loaded.[/bold red]")
     except KeyboardInterrupt:
