@@ -1,6 +1,6 @@
 # SoundCloud Player
 
-A simple terminal-based SoundCloud player using `yt-dlp` and `mpv`.
+A simple terminal-based SoundCloud player using `yt-dlp` and `mpv`. No login cookies or API-key required.
 
 ## Installation
 
