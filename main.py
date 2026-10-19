@@ -144,6 +144,106 @@ def get_full_track_info(track_url):
         return None
 
 
+_SOUNDCLOUD_IE = None
+
+
+def _get_soundcloud_ie():
+    """Lazily initializes and returns a SoundcloudIE instance with a valid client_id."""
+    global _SOUNDCLOUD_IE
+    if _SOUNDCLOUD_IE is None:
+        import yt_dlp
+        from yt_dlp.extractor.soundcloud import SoundcloudIE
+
+        ydl = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True})
+        ie = SoundcloudIE(ydl)
+        ie._initialize_pre_login()
+        _SOUNDCLOUD_IE = ie
+    return _SOUNDCLOUD_IE
+
+
+def enrich_tracks_metadata(tracks_slice):
+    """
+    Populates missing 'title', 'uploader', 'duration', and 'webpage_url' fields
+    in-place for a slice of tracks using SoundCloud's API v2 batch endpoint.
+    """
+    if not tracks_slice:
+        return tracks_slice
+
+    missing_by_id = {}
+    for track in tracks_slice:
+        needs_enrichment = (
+            not track.get("title")
+            or track.get("title") == "N/A"
+            or not track.get("uploader")
+            or track.get("uploader") == "N/A"
+            or track.get("duration") is None
+        )
+        if not needs_enrichment:
+            continue
+
+        track_id = str(track.get("id") or "")
+        if not track_id.isdigit():
+            m = re.search(r"/tracks/(\d+)", str(track.get("url") or track.get("webpage_url") or ""))
+            if m:
+                track_id = m.group(1)
+        if track_id.isdigit():
+            missing_by_id.setdefault(track_id, []).append(track)
+
+    if not missing_by_id:
+        return tracks_slice
+
+    try:
+        ie = _get_soundcloud_ie()
+        all_ids = list(missing_by_id.keys())
+        # SoundCloud API v2 /tracks endpoint accepts up to 50 IDs per batch request
+        for idx in range(0, len(all_ids), 50):
+            chunk_ids = all_ids[idx : idx + 50]
+            api_tracks = ie._call_api(
+                f"{ie._API_V2_BASE}tracks",
+                "batch",
+                query={"ids": ",".join(chunk_ids)},
+                headers=ie._HEADERS,
+                note=False,
+                fatal=False,
+            )
+            if not isinstance(api_tracks, list):
+                continue
+
+            for item in api_tracks:
+                if not isinstance(item, dict):
+                    continue
+                tid = str(item.get("id") or "")
+                if tid not in missing_by_id:
+                    continue
+
+                user = item.get("user") or {}
+                pub_meta = item.get("publisher_metadata") or {}
+                title = item.get("title")
+                uploader = user.get("username") or pub_meta.get("artist")
+                duration_ms = item.get("duration")
+                duration = (
+                    duration_ms / 1000.0
+                    if isinstance(duration_ms, (int, float))
+                    else None
+                )
+                permalink_url = item.get("permalink_url")
+
+                for target in missing_by_id[tid]:
+                    if title and (not target.get("title") or target.get("title") == "N/A"):
+                        target["title"] = title
+                    if uploader and (not target.get("uploader") or target.get("uploader") == "N/A"):
+                        target["uploader"] = uploader
+                    if duration is not None and target.get("duration") is None:
+                        target["duration"] = duration
+                    if permalink_url:
+                        target["webpage_url"] = permalink_url
+    except Exception:
+        # Fail gracefully so table rendering still works even if enrichment fails
+        pass
+
+    return tracks_slice
+
+
 def display_tracks(tracks, page_number, page_size, total_tracks):
     """
     Displays a list of tracks in a table, paginated.
@@ -156,6 +256,7 @@ def display_tracks(tracks, page_number, page_size, total_tracks):
     end_index = min(start_index + page_size, total_tracks)
     
     tracks_to_display = tracks[start_index:end_index]
+    enrich_tracks_metadata(tracks_to_display)
 
     total_pages = math.ceil(total_tracks / page_size)
 
@@ -166,11 +267,10 @@ def display_tracks(tracks, page_number, page_size, total_tracks):
     table.add_column("Duration", style="blue")
 
     for i, track in enumerate(tracks_to_display):
-        # Displaying "N/A" for uploader in the table for speed
         table.add_row(
             str(start_index + i + 1), 
-            track.get('title', 'N/A'), 
-            track.get('uploader', 'N/A'), # Will be N/A here, fetched on play
+            track.get('title') or 'N/A', 
+            track.get('uploader') or 'N/A',
             format_duration(track.get('duration'))
         )
 
@@ -194,19 +294,28 @@ def get_stream_url(track_url):
 
 def play_track(track_info, player="mpv"):
     """
-    Plays a stream URL with the selected player. Fetches full track info right before playing.
+    Plays a stream URL with the selected player. Fetches full track info if not already enriched.
     Returns:
         0: Success (song finished normally)
         4: Autoplay Toggle (user pressed 'a' in mpv)
         -1: Interrupted/Error
     """
-    # Fetch full track info for the selected track to get accurate uploader/title
-    full_info = get_full_track_info(track_info['url'])
-    if not full_info:
-        console.print(f"[bold red]Could not get full info for {track_info.get('title', 'selected track')}.[/bold red]")
-        return -1
+    enrich_tracks_metadata([track_info])
+    if (
+        track_info.get("title")
+        and track_info.get("uploader")
+        and track_info.get("duration") is not None
+        and (track_info.get("webpage_url") or track_info.get("url"))
+    ):
+        full_info = track_info
+    else:
+        full_info = get_full_track_info(track_info['url'])
+        if not full_info:
+            console.print(f"[bold red]Could not get full info for {track_info.get('title', 'selected track')}.[/bold red]")
+            return -1
     
-    stream_url = get_stream_url(full_info['webpage_url']) # Use webpage_url for stream
+    target_url = full_info.get('webpage_url') or track_info.get('url')
+    stream_url = get_stream_url(target_url) # Use webpage_url for stream
     if not stream_url:
         return -1
 
@@ -215,7 +324,7 @@ def play_track(track_info, player="mpv"):
     duration = full_info.get('duration')
     duration_str = format_duration(duration)
 
-    console.print(f"\n[bold green]Playing:[/bold green] [yellow]{title}[/yellow] by [green]{uploader}[/green] ([blue]{duration_str}[/blue])\n[dim]Link:[/dim] [link={full_info.get('webpage_url', track_info.get('url'))}]{full_info.get('webpage_url', track_info.get('url'))}[/link]")
+    console.print(f"\n[bold green]Playing:[/bold green] [yellow]{title}[/yellow] by [green]{uploader}[/green] ([blue]{duration_str}[/blue])\n[dim]Link:[/dim] [link={target_url}]{target_url}[/link]")
     
     # Create a temporary input config for mpv to allow 'a' to quit with a specific exit code
     input_conf = os.path.expanduser("~/.cache/scloud-player-input.conf")
@@ -328,7 +437,8 @@ if __name__ == "__main__":
                             
                             # Intermission before next song if autoplay is still on
                             if config.get("autoplay", False):
-                                next_title = tracks[current_track_index].get('title', 'Unknown')
+                                enrich_tracks_metadata([tracks[current_track_index]])
+                                next_title = tracks[current_track_index].get('title') or 'Unknown'
                                 if not intermission(next_title):
                                     config["autoplay"] = False
                                     current_track_index = -1

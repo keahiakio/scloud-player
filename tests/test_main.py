@@ -49,3 +49,50 @@ def test_get_track_data_command(mock_run):
     assert "yt-dlp" in command[0]
     assert "--flat-playlist" in command
     assert url in command
+
+
+@patch("main._get_soundcloud_ie")
+def test_enrich_tracks_metadata(mock_get_ie):
+    from main import enrich_tracks_metadata
+
+    mock_ie = MagicMock()
+    mock_ie._API_V2_BASE = "https://api-v2.soundcloud.com/"
+    mock_ie._HEADERS = {}
+    mock_ie._call_api.return_value = [
+        {
+            "id": 2193979815,
+            "title": "Return To You",
+            "user": {"username": "fubuki"},
+            "duration": 137488,
+            "permalink_url": "https://soundcloud.com/holoshirakami/return-to-you",
+        },
+        {
+            "id": 2419427934,
+            "title": "Korekara",
+            "user": {},
+            "publisher_metadata": {"artist": "xaev"},
+            "duration": 173314,
+            "permalink_url": "https://soundcloud.com/xaev/korekara",
+        },
+    ]
+    mock_get_ie.return_value = mock_ie
+
+    tracks = [
+        {"id": "2193979815", "title": "Return To You", "url": "https://soundcloud.com/holoshirakami/return-to-you"},
+        {"id": "2419427934", "url": "https://api-v2.soundcloud.com/tracks/2419427934"},
+    ]
+
+    enrich_tracks_metadata(tracks)
+
+    assert tracks[0]["uploader"] == "fubuki"
+    assert tracks[0]["duration"] == 137.488
+    assert tracks[1]["title"] == "Korekara"
+    assert tracks[1]["uploader"] == "xaev"
+    assert tracks[1]["duration"] == 173.314
+    assert tracks[1]["webpage_url"] == "https://soundcloud.com/xaev/korekara"
+
+    # Calling a second time on already-enriched tracks should not trigger another API call
+    mock_ie._call_api.reset_mock()
+    enrich_tracks_metadata(tracks)
+    mock_ie._call_api.assert_not_called()
+

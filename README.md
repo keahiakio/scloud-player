@@ -68,7 +68,7 @@ Follow these steps to use the SoundCloud Player script:
     *   **Input History:** You can use the **Up/Down arrow keys** to scroll through your previous URL and track selection entries.
 
 4.  **Navigate and select a track:**
-    The script will display a paginated list of tracks.
+    The script will display a paginated list of tracks with each track's **Title**, **Uploader**, and **Duration** automatically resolved per page via SoundCloud's API v2 batch endpoint.
 
     You have the following options:
     *   Enter a **track number** (e.g., `6`) to play the corresponding song.
@@ -81,7 +81,7 @@ Follow these steps to use the SoundCloud Player script:
     *   Press `Ctrl+C` to **exit** the program completely.
 
 5.  **Enjoy the music!**
-    When you select a track, the script will first fetch its full details (including uploader and duration) and display them, then launch `mpv` to play the audio. `mpv` will take over your terminal during playback.
+    When you select a track, the script resolves its direct stream URL and launches `mpv` to play the audio. `mpv` will take over your terminal during playback.
 
     **While playing (mpv only):**
     *   Press **`a`** to stop the current song and **disable autoplay** for the rest of the session.
