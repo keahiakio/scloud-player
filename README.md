@@ -118,3 +118,22 @@ Now you can just run `scloud-player` from anywhere!
 *   **`mpv` exits prematurely / Nothing plays:** This can be due to various reasons (e.g., invalid stream, `mpv` configuration, audio device issues). To diagnose, you would temporarily modify the `play_track` function in `main.py` to print `mpv`'s verbose output (e.g., `subprocess.run(["mpv", "--verbose", stream_url], capture_output=True, text=True)` and then print `process.stdout` and `process.stderr`). However, this requires direct modification of the script and is beyond the current scope of the task.
 
 If you encounter any other issues, please let me know!
+
+## License
+
+Dual-licensed under either:
+
+- **MIT License** ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+
+at your option.
+
+### Third-Party Compliance
+
+All dependencies used by this project are open source and permissive:
+
+- **requests**: Apache-2.0
+- **yt-dlp**: The Unlicense
+- **rich**: MIT
+- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (external CLI player executed via `subprocess`)
+

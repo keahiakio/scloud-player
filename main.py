@@ -1,4 +1,7 @@
-#!/home/keahiakio/scloud-player/venv/bin/python
+#!/home/keahiakio/projects/scloud-player/venv/bin/python
+# SPDX-License-Identifier: MIT OR Apache-2.0
+# Copyright (c) 2026 Kiwi Akio
+
 import subprocess
 import json
 import sys

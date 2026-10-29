@@ -1,0 +1,17 @@
+This project is dual-licensed under either:
+
+- MIT License (LICENSE-MIT or https://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 (LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0)
+
+at your option.
+
+---
+
+### Third-Party Licenses & Compliance
+
+This tool interacts with and depends on the following software:
+
+- **requests**: Apache-2.0 (<https://github.com/psf/requests>)
+- **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>)
+- **rich**: MIT (<https://github.com/Textualize/rich>)
+- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (external CLI player executed via subprocess, independent runtime)
