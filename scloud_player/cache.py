@@ -7,17 +7,60 @@ Preloads and caches up to 30 songs concurrently in the background so
 transitions between tracks are instantaneous with zero delay.
 """
 
+import base64
 import json
 import os
 import subprocess
 import threading
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Optional
 from scloud_player.config import CACHE_DIR
 
 DISK_CACHE_FILE = os.path.join(CACHE_DIR, "stream_cache.json")
-STREAM_TTL_SECONDS = 10800  # 3 hours (SoundCloud streaming links remain valid ~4h)
+# SoundCloud streaming links expire in ~5-6 minutes (300-360 seconds).
+# We use a conservative default TTL of 4 minutes (240s) and a safety buffer of 30 seconds
+# before signed URL expiration to prevent mid-request 403s.
+STREAM_TTL_SECONDS = 240
+EXPIRY_BUFFER_SECONDS = 30
+
+
+def extract_url_expiry(stream_url: str) -> Optional[float]:
+    """
+    Extracts the epoch expiration timestamp from a signed stream URL if available
+    (e.g., CloudFront signed URLs with Policy or Expires parameters).
+    """
+    if not stream_url:
+        return None
+    try:
+        parsed = urllib.parse.urlparse(stream_url)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        # Check canned policy 'Expires' / 'expires' query parameter
+        for key in ("Expires", "expires"):
+            if key in params:
+                val = float(params[key][0])
+                if val > 1.5e9:
+                    return val
+
+        # Check CloudFront custom 'Policy'
+        if "Policy" in params:
+            policy_b64 = params["Policy"][0]
+            # AWS CloudFront URL-safe base64: '-' -> '+', '_' -> '=', '~' -> '/'
+            std_b64 = policy_b64.replace("-", "+").replace("_", "=").replace("~", "/")
+            padding = len(std_b64) % 4
+            if padding:
+                std_b64 += "=" * (4 - padding)
+            decoded = base64.b64decode(std_b64).decode("utf-8", errors="ignore")
+            data = json.loads(decoded)
+            for stmt in data.get("Statement", []):
+                epoch = stmt.get("Condition", {}).get("DateLessThan", {}).get("AWS:EpochTime")
+                if epoch and float(epoch) > 1.5e9:
+                    return float(epoch)
+    except Exception:
+        pass
+    return None
 
 
 def resolve_stream_url(track_url: str, yt_dlp_path: Optional[str] = None) -> Optional[str]:
@@ -66,6 +109,20 @@ class SongCacheManager:
             return str(track["id"])
         return track.get("webpage_url") or track.get("url") or ""
 
+    def _is_entry_valid(self, entry: Optional[dict], now: Optional[float] = None) -> bool:
+        """Determines whether a cache entry contains an active, unexpired stream URL."""
+        if not entry or not entry.get("stream_url"):
+            return False
+        if now is None:
+            now = time.time()
+
+        expires_at = entry.get("expires_at")
+        if expires_at is not None:
+            return (expires_at - now) > EXPIRY_BUFFER_SECONDS
+
+        cached_at = entry.get("cached_at", 0)
+        return (now - cached_at) < STREAM_TTL_SECONDS
+
     def _load_disk_cache(self):
         """Loads cached stream URLs from disk, pruning expired entries."""
         if not os.path.exists(DISK_CACHE_FILE):
@@ -76,7 +133,7 @@ class SongCacheManager:
             now = time.time()
             with self._lock:
                 for k, v in data.items():
-                    if now - v.get("cached_at", 0) < STREAM_TTL_SECONDS:
+                    if isinstance(v, dict) and self._is_entry_valid(v, now):
                         self._memory_cache[k] = v
         except Exception:
             pass
@@ -89,7 +146,7 @@ class SongCacheManager:
             with self._lock:
                 valid = {
                     k: v for k, v in self._memory_cache.items()
-                    if now - v.get("cached_at", 0) < STREAM_TTL_SECONDS
+                    if self._is_entry_valid(v, now)
                 }
             with open(DISK_CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(valid, f)
@@ -103,13 +160,15 @@ class SongCacheManager:
             return False
         with self._lock:
             entry = self._memory_cache.get(key)
-            if entry and (time.time() - entry.get("cached_at", 0) < STREAM_TTL_SECONDS):
-                return bool(entry.get("stream_url"))
+            if entry and self._is_entry_valid(entry):
+                return True
+            if entry:
+                self._memory_cache.pop(key, None)
         return False
 
     def get_stream_url(self, track: dict, fallback_resolve: bool = True) -> Optional[str]:
         """
-        Retrieves the stream URL from cache. If missing and fallback_resolve is True,
+        Retrieves the stream URL from cache. If missing or expired and fallback_resolve is True,
         resolves it synchronously and stores it in cache.
         """
         key = self._get_key(track)
@@ -118,8 +177,10 @@ class SongCacheManager:
 
         with self._lock:
             entry = self._memory_cache.get(key)
-            if entry and (time.time() - entry.get("cached_at", 0) < STREAM_TTL_SECONDS):
+            if entry and self._is_entry_valid(entry):
                 return entry.get("stream_url")
+            if entry:
+                self._memory_cache.pop(key, None)
 
         if not fallback_resolve:
             return None
@@ -136,6 +197,10 @@ class SongCacheManager:
 
     def store_stream_url(self, key: str, stream_url: str, metadata: Optional[dict] = None):
         """Stores a resolved stream URL into memory and persistent cache."""
+        now = time.time()
+        url_expiry = extract_url_expiry(stream_url)
+        expires_at = url_expiry if url_expiry else (now + STREAM_TTL_SECONDS)
+
         with self._lock:
             # Enforce max memory cache size (prune oldest if needed)
             if len(self._memory_cache) >= self.cache_size * 2:
@@ -144,7 +209,8 @@ class SongCacheManager:
 
             self._memory_cache[key] = {
                 "stream_url": stream_url,
-                "cached_at": time.time(),
+                "cached_at": now,
+                "expires_at": expires_at,
                 "metadata": metadata or {}
             }
 
@@ -155,16 +221,34 @@ class SongCacheManager:
             except Exception:
                 pass
 
-    def preload_tracks(self, tracks: List[dict], priority_index: int = 0):
+    def invalidate(self, track_or_key):
+        """Invalidates and removes a track's cached stream URL from memory and disk."""
+        if isinstance(track_or_key, dict):
+            key = self._get_key(track_or_key)
+        else:
+            key = str(track_or_key)
+        if not key:
+            return
+        with self._lock:
+            self._memory_cache.pop(key, None)
+        self._save_disk_cache()
+
+    def preload_tracks(self, tracks: List[dict], priority_index: int = 0, preload_ahead: Optional[int] = 5):
         """
-        Preloads up to 40 songs into memory in the background.
-        Prioritizes the track at `priority_index` and subsequent tracks.
+        Preloads upcoming songs into memory in the background.
+        Prioritizes the track at `priority_index` and subsequent upcoming tracks.
         """
         if not tracks:
             return
 
-        batch = tracks[:self.cache_size]
-        ordered = batch[priority_index:] + batch[:priority_index]
+        total = len(tracks)
+        if preload_ahead is not None:
+            limit = min(preload_ahead, total, self.cache_size)
+            indices = [(priority_index + i) % total for i in range(limit)]
+            ordered = [tracks[i] for i in indices]
+        else:
+            batch = tracks[:self.cache_size]
+            ordered = batch[priority_index:] + batch[:priority_index]
 
         for track in ordered:
             key = self._get_key(track)

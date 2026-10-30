@@ -52,3 +52,23 @@ def test_visualizer_args_variations():
     # Caca mode
     caca_args = get_visualizer_args("caca", "Song", "Artist")
     assert "--vo=caca" in caca_args
+
+
+def test_player_error_callback():
+    from scloud_player.player import MpvPlayer
+    import json
+    import time
+    with patch("scloud_player.player.subprocess.Popen"), \
+         patch("scloud_player.player.socket.socket"):
+        player = MpvPlayer()
+        player._running = False
+        track = {"id": "123", "title": "Fail Song"}
+        player._state.current_track = track
+
+        error_called = []
+        player.set_on_track_error_callback(lambda trk: error_called.append(trk))
+
+        player._handle_ipc_message(json.dumps({"event": "end-file", "reason": "error"}))
+        time.sleep(0.1)
+        assert len(error_called) == 1
+        assert error_called[0] == track

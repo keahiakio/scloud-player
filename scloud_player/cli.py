@@ -118,8 +118,11 @@ def play_track(track_info, player="mpv", config=None, cache_mgr=None):
 
     # Use cache if available
     stream_url = None
+    from_cache = False
     if cache_mgr:
         stream_url = cache_mgr.get_stream_url(track_info)
+        if stream_url:
+            from_cache = True
     if not stream_url and target_url:
         stream_url = get_stream_url(target_url)
 
@@ -171,6 +174,19 @@ def play_track(track_info, player="mpv", config=None, cache_mgr=None):
                 console.print("[bold cyan]Autoplay disabled via 'a' key.[/bold cyan]")
                 return 4
             elif result.returncode != 0:
+                # If cached stream URL failed (e.g. 403 expired), refresh cache and retry once
+                if from_cache and cache_mgr and target_url:
+                    console.print("[bold yellow]Stream URL failed (possibly expired). Refreshing...[/bold yellow]")
+                    cache_mgr.invalidate(track_info)
+                    fresh_stream = cache_mgr.get_stream_url(track_info, fallback_resolve=True)
+                    if fresh_stream and fresh_stream != stream_url:
+                        retry_cmd = ["mpv", f"--input-conf={input_conf}"] + vis_args + [fresh_stream]
+                        retry_res = subprocess.run(retry_cmd, check=False)
+                        if retry_res.returncode == 4:
+                            console.print("[bold cyan]Autoplay disabled via 'a' key.[/bold cyan]")
+                            return 4
+                        elif retry_res.returncode == 0:
+                            return 0
                 return -1
         return 0
     except subprocess.CalledProcessError as e:
@@ -242,6 +258,7 @@ def run_cli(initial_url=None):
 
                 if current_track_index != -1 and current_track_index < len(tracks):
                     selected = tracks[current_track_index]
+                    cache_mgr.preload_tracks(tracks, priority_index=current_track_index)
                     status = play_track(selected, player=config.get("player", "mpv"), config=config, cache_mgr=cache_mgr)
                     if status == 4:
                         config["autoplay"] = False

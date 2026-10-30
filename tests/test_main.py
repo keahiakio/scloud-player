@@ -112,3 +112,32 @@ def test_get_visualizer_args():
     caca_args = get_visualizer_args("caca", "Title", "Artist")
     assert "--vo=caca" in caca_args
 
+
+@patch("subprocess.run")
+def test_play_track_retry_on_expired_cache(mock_run):
+    from scloud_player.cli import play_track
+    from scloud_player.cache import SongCacheManager
+
+    mock_cache = MagicMock(spec=SongCacheManager)
+    # First get_stream_url returns expired url
+    mock_cache.get_stream_url.side_effect = ["https://example.com/expired.m3u8", "https://example.com/fresh.m3u8"]
+
+    # First mpv run fails with returncode 1, second mpv run succeeds with returncode 0
+    mock_run.side_effect = [
+        MagicMock(returncode=1),
+        MagicMock(returncode=0),
+    ]
+
+    track_info = {
+        "id": "123",
+        "title": "Test Song",
+        "uploader": "Artist",
+        "duration": 180,
+        "webpage_url": "https://soundcloud.com/artist/test-song",
+    }
+
+    result = play_track(track_info, player="mpv", config={"visualizer": "off", "fullscreen": False}, cache_mgr=mock_cache)
+    assert result == 0
+    mock_cache.invalidate.assert_called_once_with(track_info)
+    assert mock_run.call_count == 2
+

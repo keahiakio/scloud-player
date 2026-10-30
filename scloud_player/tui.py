@@ -741,6 +741,8 @@ class ScloudPlayerApp(App):
 
         self.player = MpvPlayer(initial_volume=self.config.get("volume", 80))
         self.player.set_on_track_end_callback(self._on_mpv_track_end)
+        self.player.set_on_track_error_callback(self._on_mpv_track_error)
+        self._retry_attempted = False
 
         self.visualizer_engine = VisualizerEngine(num_bars=self.config.get("visualizer_bars", 24))
         self.vis_mode = self.config.get("visualizer", "cava")
@@ -1065,6 +1067,28 @@ class ScloudPlayerApp(App):
         if self.autoplay or self.repeat_mode == "all":
             self.call_from_thread(self._advance_to_next_track)
 
+    def _on_mpv_track_error(self, track: Optional[dict]):
+        """Callback when MPV encounters an error playing a stream URL."""
+        if not track:
+            return
+
+        # Attempt to recover from expired or invalid cached stream URLs
+        if not getattr(self, "_retry_attempted", False):
+            self._retry_attempted = True
+            self.cache_manager.invalidate(track)
+
+            def do_retry_play():
+                fresh_url = self.cache_manager.get_stream_url(track, fallback_resolve=True)
+                if fresh_url:
+                    self.player.play(fresh_url, track)
+                    self.call_from_thread(self._populate_table)
+                elif self.autoplay or self.repeat_mode == "all":
+                    self.call_from_thread(self._advance_to_next_track)
+
+            threading.Thread(target=do_retry_play, daemon=True).start()
+        elif self.autoplay or self.repeat_mode == "all":
+            self.call_from_thread(self._advance_to_next_track)
+
     def _advance_to_next_track(self):
         """Advances playback to next track in queue."""
         if not self.filtered_tracks:
@@ -1090,6 +1114,7 @@ class ScloudPlayerApp(App):
 
         track = self.filtered_tracks[index]
         self.selected_track_index = index
+        self._retry_attempted = False
 
         # Highlight in table
         base = self.screen_stack[0] if self.screen_stack else self.screen
@@ -1098,6 +1123,9 @@ class ScloudPlayerApp(App):
             table.move_cursor(row=index)
         except Exception:
             pass
+
+        # Trigger background preloading for next upcoming tracks in sliding window
+        self.cache_manager.preload_tracks(self.filtered_tracks, priority_index=index)
 
         # Check pre-cache
         stream_url = self.cache_manager.get_stream_url(track, fallback_resolve=False)

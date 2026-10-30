@@ -109,6 +109,7 @@ class MpvPlayer:
         self._state = PlaybackState()
         self._state.volume = float(initial_volume)
         self._on_track_end: Optional[Callable[[], None]] = None
+        self._on_track_error: Optional[Callable[[Optional[dict]], None]] = None
 
         self._start_mpv()
         self._connect_ipc()
@@ -119,6 +120,9 @@ class MpvPlayer:
 
     def set_on_track_end_callback(self, cb: Callable[[], None]):
         self._on_track_end = cb
+
+    def set_on_track_error_callback(self, cb: Callable[[Optional[dict]], None]):
+        self._on_track_error = cb
 
     def _start_mpv(self):
         """Starts background mpv daemon with IPC server enabled."""
@@ -135,6 +139,10 @@ class MpvPlayer:
             "--no-video",
             "--no-terminal",
             f"--volume={int(self._state.volume)}",
+            "--network-timeout=15",
+            "--cache=yes",
+            "--demuxer-max-bytes=20M",
+            "--demuxer-readahead-secs=60",
         ]
 
         self._proc = subprocess.Popen(
@@ -260,6 +268,9 @@ class MpvPlayer:
             elif reason in ("quit", "error"):
                 self._state.is_playing = False
                 self._state.idle = True
+                if reason == "error" and self._on_track_error:
+                    curr_track = self._state.current_track
+                    threading.Thread(target=self._on_track_error, args=(curr_track,), daemon=True).start()
 
         elif event == "playback-restart":
             self._state.is_playing = True
