@@ -265,3 +265,9 @@ All dependencies and external programs used by this project are open source:
 - **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>) - Stream URL and metadata extractor.
 - **ffmpeg**: LGPL-2.1-or-later / GPL-2.0-or-later (<https://ffmpeg.org>) - Multimedia decoding libraries.
 - **requests**: Apache License 2.0 (<https://github.com/psf/requests>) - HTTP client library.
+
+---
+
+## AI Disclosure
+
+This is an AI-assisted project. Code and documentation were developed with the assistance of AI tools.
