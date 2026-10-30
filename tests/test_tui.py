@@ -57,4 +57,7 @@ def test_tui_app_lifecycle():
                     app.action_prev_track()
                     mock_play.assert_called_with(0)
 
+                # Test credits modal action
+                app.action_show_credits()
+
     asyncio.run(_async_run())

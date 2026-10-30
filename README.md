@@ -193,6 +193,29 @@ Run the test suite using `pytest`:
 
 ---
 
+## Credits & Acknowledgements
+
+This project is built on the shoulders of giants across the open source community. Immense gratitude and credit go to:
+
+- **[musikcube](https://github.com/clangen/musikcube)** (Casey Langen & contributors):
+  The gold standard of terminal audio players. `scloud-player` is heavily inspired by `musikcube`'s clean multi-pane layout, responsive split architecture, and intuitive keyboard navigation.
+- **[CAVA (Console-based Audio Visualizer)](https://github.com/karlstav/cava)** (Karl Stavestrand & contributors):
+  The legendary terminal audio visualizer for Linux and macOS. Powers the live, responsive audio spectrum analysis by reading audio sinks directly from PulseAudio and PipeWire.
+- **[mpv](https://mpv.io)** (The mpv project & contributors):
+  The rock-solid media player used as the audio engine daemon. Its JSON IPC protocol enables non-blocking transport controls, live time-position polling, and instant streaming.
+- **[Textual](https://github.com/Textualize/textual)** (Will McGugan & Textualize):
+  The modern, reactive Python TUI framework that brings terminal applications to life with CSS styling and asynchronous widgets.
+- **[Rich](https://github.com/Textualize/rich)** (Will McGugan & Textualize):
+  The foundational Python library for beautiful terminal formatting, tables, color gradients, and renderables.
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** (The yt-dlp project team):
+  The high-performance media downloader and metadata extractor that makes fast paginated SoundCloud stream extraction possible.
+- **[FFmpeg](https://ffmpeg.org)** (Fabrice Bellard & the FFmpeg team):
+  The universal multimedia processing framework used under the hood for audio decoding.
+- **[Requests](https://github.com/psf/requests)** (Kenneth Reitz & the Python Software Foundation):
+  The standard HTTP library powering rapid batch track enrichment against SoundCloud's API v2.
+
+---
+
 ## License & Compliance
 
 ### Dual License
@@ -204,14 +227,15 @@ This project is dual-licensed under either:
 
 at your option.
 
-### Third-Party Compliance & Credits
+### Third-Party Compliance & Licenses
 
-All dependencies and tools used by this project are open source:
+All dependencies and external programs used by this project are open source:
 
-- **textual**: MIT License (<https://github.com/Textualize/textual>) - Modern terminal application framework.
-- **rich**: MIT License (<https://github.com/Textualize/rich>) - Terminal formatting, tables, and markup.
-- **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>) - Media extraction tool.
-- **requests**: Apache License 2.0 (<https://github.com/psf/requests>) - HTTP library.
-- **cava**: MIT License (<https://github.com/karlstav/cava>) - Console audio visualizer (executed as independent subprocess).
-- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (<https://mpv.io>) - Audio backend controlled via JSON IPC.
+- **musikcube**: BSD-3-Clause (<https://github.com/clangen/musikcube>) - Layout & UX inspiration.
+- **cava**: MIT License (<https://github.com/karlstav/cava>) - Audio visualizer subprocess.
+- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (<https://mpv.io>) - Media player daemon controlled via external JSON IPC.
+- **textual**: MIT License (<https://github.com/Textualize/textual>) - Terminal user interface framework.
+- **rich**: MIT License (<https://github.com/Textualize/rich>) - Terminal formatting and tables.
+- **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>) - Stream URL and metadata extractor.
 - **ffmpeg**: LGPL-2.1-or-later / GPL-2.0-or-later (<https://ffmpeg.org>) - Multimedia decoding libraries.
+- **requests**: Apache License 2.0 (<https://github.com/psf/requests>) - HTTP client library.

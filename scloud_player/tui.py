@@ -155,6 +155,68 @@ class UrlModal(ModalScreen[Optional[str]]):
         self.dismiss(val if val else None)
 
 
+class CreditsModal(ModalScreen):
+    """Modal dialog displaying credits and acknowledgements for open source projects."""
+
+    DEFAULT_CSS = """
+    CreditsModal {
+        align: center middle;
+        background: rgba(0, 0, 0, 0.75);
+    }
+
+    #credits-dialog {
+        padding: 1 2;
+        width: 82;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+    }
+
+    #credits-title {
+        text-align: center;
+        margin-bottom: 1;
+    }
+
+    #credits-body {
+        margin-bottom: 1;
+    }
+
+    #credits-buttons {
+        align: right middle;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", priority=True),
+        Binding("enter", "dismiss", "Close", priority=True),
+        Binding("space", "dismiss", "Close", priority=True),
+        Binding("q", "dismiss", "Close", priority=True),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="credits-dialog"):
+            yield Label("[bold magenta]♫ SoundCloud Player — Credits & Acknowledgements ♫[/bold magenta]", id="credits-title")
+            t = Table.grid(padding=(0, 2))
+            t.add_column(width=16)
+            t.add_column()
+
+            t.add_row(Text("musikcube", style="bold cyan"), Text("Terminal audio UX, split layout & keyboard navigation inspiration (clangen)", style="white"))
+            t.add_row(Text("CAVA", style="bold cyan"), Text("Audio spectrum visualizer backend for PulseAudio / PipeWire (Karl Stavestrand)", style="white"))
+            t.add_row(Text("mpv", style="bold cyan"), Text("High-performance audio engine & JSON IPC daemon (mpv project)", style="white"))
+            t.add_row(Text("Textual", style="bold cyan"), Text("Reactive terminal user interface framework (Will McGugan & Textualize)", style="white"))
+            t.add_row(Text("Rich", style="bold cyan"), Text("Terminal styling, tables & renderables (Textualize)", style="white"))
+            t.add_row(Text("yt-dlp", style="bold cyan"), Text("SoundCloud stream URL & metadata extractor (yt-dlp team)", style="white"))
+            t.add_row(Text("FFmpeg", style="bold cyan"), Text("Multimedia audio decoding toolkit (FFmpeg team)", style="white"))
+            t.add_row(Text("requests", style="bold cyan"), Text("HTTP library for SoundCloud API v2 batch enrichment (PSF)", style="white"))
+
+            yield Static(Panel(t, title="[bold yellow]Open Source Credits[/bold yellow]", border_style="dim cyan"), id="credits-body")
+            with Horizontal(id="credits-buttons"):
+                yield Button("Close (Esc)", variant="primary", id="btn-close-credits")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss()
+
+
 class VisualizerWidget(Static):
     """Widget displaying the live CAVA spectrum analyzer with color gradients."""
 
@@ -410,6 +472,8 @@ class ScloudPlayerApp(App):
         Binding("u", "load_url", "Load URL"),
         Binding("slash", "focus_filter", "Search/Filter"),
         Binding("escape", "clear_filter", "Clear Filter"),
+        Binding("question_mark", "show_credits", "Credits & Help"),
+        Binding("f1", "show_credits", "Credits & Help"),
         Binding("q", "quit_app", "Quit"),
     ]
 
@@ -492,6 +556,7 @@ class ScloudPlayerApp(App):
             ("[v]", "Cycle Visualizer Mode"),
             ("[l]", "Load SoundCloud URL"),
             ("[/]", "Quick Search Filter"),
+            ("[?]", "Credits & Help"),
             ("[q]", "Quit Player"),
         ]
         for key, desc in shortcuts:
@@ -813,6 +878,10 @@ class ScloudPlayerApp(App):
             self._play_track_at_index(row_idx)
         except Exception:
             pass
+
+    def action_show_credits(self) -> None:
+        """Opens modal displaying open source credits and acknowledgements."""
+        self.push_screen(CreditsModal())
 
     def action_quit_app(self) -> None:
         self.player.shutdown()
