@@ -164,17 +164,17 @@ class NowPlayingCard(Static):
         status_style = "bold yellow" if is_paused else ("bold green" if is_playing else "dim")
 
         t = Table.grid(padding=(0, 1))
-        t.add_column(style="bold cyan", width=10)
-        t.add_column(style="bold white")
+        t.add_column(width=10)
+        t.add_column()
 
-        t.add_row("Track:", title[:38])
-        t.add_row("Artist:", artist[:38])
-        t.add_row("Duration:", duration)
-        t.add_row("Status:", Text(status_text, style=status_style))
+        t.add_row(Text("Track:", style="bold cyan"), Text(title[:38], style="bold white"))
+        t.add_row(Text("Artist:", style="bold cyan"), Text(artist[:38], style="bold white"))
+        t.add_row(Text("Duration:", style="bold cyan"), Text(duration, style="bold white"))
+        t.add_row(Text("Status:", style="bold cyan"), Text(status_text, style=status_style))
 
         genre = track.get("genre")
         if genre:
-            t.add_row("Genre:", str(genre)[:38])
+            t.add_row(Text("Genre:", style="bold cyan"), Text(str(genre)[:38], style="bold white"))
 
         self.update(Panel(
             t,
@@ -384,7 +384,7 @@ class ScloudPlayerApp(App):
 
     def compose(self) -> ComposeResult:
         with Container(id="app-container"):
-            yield Static(" SoundCloud Player [Musikcube] | Press [l] to Load URL | [?] Help", id="top-bar")
+            yield Static(Text(" SoundCloud Player [Musikcube] | Press [l] to Load URL | [?] Help", style="bold cyan"), id="top-bar")
 
             with Horizontal(id="main-split"):
                 with Vertical(id="left-panel"):
@@ -415,21 +415,25 @@ class ScloudPlayerApp(App):
 
     def _build_shortcuts_cheatsheet(self) -> Panel:
         t = Table.grid(padding=(0, 2))
-        t.add_column(style="bold cyan", width=12)
-        t.add_column(style="white")
+        t.add_column(width=14)
+        t.add_column()
 
-        t.add_row("[Space]", "Play / Pause")
-        t.add_row("[Enter]", "Play Selected Track")
-        t.add_row("[n] / [p]", "Next / Prev Page (30 Tracks)")
-        t.add_row("[<] / [>]", "Seek -5s / +5s")
-        t.add_row("[-] / [+]", "Volume Down / Up")
-        t.add_row("[a]", "Toggle Autoplay")
-        t.add_row("[s]", "Toggle Shuffle")
-        t.add_row("[r]", "Cycle Repeat (Off/One/All)")
-        t.add_row("[v]", "Cycle Visualizer Mode")
-        t.add_row("[l]", "Load SoundCloud URL")
-        t.add_row("[/]", "Quick Search Filter")
-        t.add_row("[q]", "Quit Player")
+        shortcuts = [
+            ("[Space]", "Play / Pause"),
+            ("[Enter]", "Play Selected Track"),
+            ("[n] / [p]", "Next / Prev Page (30 Tracks)"),
+            ("[<] / [>]", "Seek -5s / +5s"),
+            ("[-] / [+]", "Volume Down / Up"),
+            ("[a]", "Toggle Autoplay"),
+            ("[s]", "Toggle Shuffle"),
+            ("[r]", "Cycle Repeat (Off/One/All)"),
+            ("[v]", "Cycle Visualizer Mode"),
+            ("[l]", "Load SoundCloud URL"),
+            ("[/]", "Quick Search Filter"),
+            ("[q]", "Quit Player"),
+        ]
+        for key, desc in shortcuts:
+            t.add_row(Text(key, style="bold cyan"), Text(desc, style="white"))
 
         return Panel(t, title="[bold yellow]⚡ KEYBOARD SHORTCUTS ⚡[/bold yellow]", border_style="dim cyan")
 
@@ -488,7 +492,7 @@ class ScloudPlayerApp(App):
         total_txt = f" of {self.track_page.total_tracks}" if self.track_page and self.track_page.total_tracks else ""
         source_title = self.track_page.playlist_title if self.track_page and self.track_page.playlist_title else self.current_url
         self.query_one("#pagination-bar", Static).update(
-            f" Page {self.current_page}{total_txt} ({len(self.filtered_tracks)} tracks) | [p] Prev Page | [n] Next Page | Source: {source_title[:35]}"
+            Text(f" Page {self.current_page}{total_txt} ({len(self.filtered_tracks)} tracks) | [p] Prev Page | [n] Next Page | Source: {source_title[:35]}")
         )
 
     def _on_track_cached_bg(self, key: str, stream_url: str):
