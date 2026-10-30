@@ -11,7 +11,7 @@ def test_cache_store_and_retrieve(tmp_path):
     with patch("scloud_player.cache.CACHE_DIR", str(tmp_path)), \
          patch("scloud_player.cache.DISK_CACHE_FILE", str(tmp_path / "stream_cache.json")):
 
-        mgr = SongCacheManager(cache_size=30)
+        mgr = SongCacheManager(cache_size=40)
         track = {"id": "12345", "title": "Test Song", "webpage_url": "https://soundcloud.com/test/song"}
 
         assert not mgr.has_stream_url(track)
@@ -38,7 +38,7 @@ def test_preload_tracks_triggers_workers(tmp_path):
 
         mock_resolve.return_value = "https://stream.sndcdn.com/audio.mp3"
 
-        mgr = SongCacheManager(cache_size=30)
+        mgr = SongCacheManager(cache_size=40)
         tracks = [
             {"id": f"t_{i}", "title": f"Song {i}", "webpage_url": f"https://soundcloud.com/test/song{i}"}
             for i in range(5)
@@ -56,7 +56,7 @@ def test_cache_clear(tmp_path):
     with patch("scloud_player.cache.CACHE_DIR", str(tmp_path)), \
          patch("scloud_player.cache.DISK_CACHE_FILE", str(tmp_path / "stream_cache.json")):
 
-        mgr = SongCacheManager(cache_size=30)
+        mgr = SongCacheManager(cache_size=40)
         mgr.store_stream_url("123", "https://example.com/stream.mp3", {})
         assert mgr.has_stream_url({"id": "123"})
 

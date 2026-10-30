@@ -167,11 +167,11 @@ class TrackPage:
 def get_track_data(
     url: str,
     page: int = 1,
-    page_size: int = 30,
+    page_size: int = 40,
     yt_dlp_path: Optional[str] = None
 ) -> Optional[List[dict]]:
     """
-    Fetches up to `page_size` (max 30) tracks from a SoundCloud URL using yt-dlp.
+    Fetches up to `page_size` (max 40) tracks from a SoundCloud URL using yt-dlp.
     Uses --playlist-items for fast paginated retrieval without loading the full playlist at once.
     """
     if not yt_dlp_path:
@@ -213,7 +213,7 @@ def get_track_data(
 def fetch_track_page(
     url: str,
     page: int = 1,
-    page_size: int = 30,
+    page_size: int = 40,
     yt_dlp_path: Optional[str] = None
 ) -> TrackPage:
     """

@@ -202,7 +202,7 @@ def run_cli(initial_url=None):
     setup_readline()
     config = load_config()
     config["autoplay"] = False
-    cache_mgr = SongCacheManager(cache_size=30)
+    cache_mgr = SongCacheManager(cache_size=40)
 
     try:
         while True:
@@ -217,12 +217,12 @@ def run_cli(initial_url=None):
             if not soundcloud_url:
                 continue
 
-            page_size = 30
+            page_size = 40
             current_page = 1
             current_track_index = -1
 
             while True:
-                # Load up to 30 tracks for current page
+                # Load up to 40 tracks for current page
                 page_data = fetch_track_page(soundcloud_url, page=current_page, page_size=page_size)
                 tracks = page_data.tracks
                 if not tracks:

@@ -18,8 +18,8 @@ DEFAULT_CONFIG = {
     "player": "mpv",
     "autoplay": False,
     "shuffle": False,
-    "page_size": 30,          # 30 songs max per page
-    "cache_size": 30,         # 30 songs cached in memory/stream cache
+    "page_size": 40,          # 40 songs max per page
+    "cache_size": 40,         # 40 songs cached in memory/stream cache
     "visualizer": "cava",     # "cava", "spectrum", "waves", "vectorscope", "off"
     "visualizer_bars": 24,    # Number of frequency bars in TUI visualizer
     "fullscreen": True,

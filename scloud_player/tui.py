@@ -336,6 +336,10 @@ class ScloudPlayerApp(App):
     BINDINGS = [
         Binding("space", "toggle_play", "Play/Pause", priority=True),
         Binding("enter", "play_selected", "Play Selected"),
+        Binding("bracket_right", "next_track", "Next Track"),
+        Binding("bracket_left", "prev_track", "Prev Track"),
+        Binding("N", "next_track", "Next Track"),
+        Binding("P", "prev_track", "Prev Track"),
         Binding("n", "next_page", "Next Page"),
         Binding("p", "prev_page", "Prev Page"),
         Binding("right", "seek_forward", "Seek +5s"),
@@ -362,12 +366,12 @@ class ScloudPlayerApp(App):
         self.current_url = self.initial_url
 
         self.current_page = 1
-        self.page_size = 30
+        self.page_size = 40
         self.track_page: Optional[TrackPage] = None
         self.filtered_tracks: List[dict] = []
         self.selected_track_index: int = 0
 
-        self.cache_manager = SongCacheManager(cache_size=30)
+        self.cache_manager = SongCacheManager(cache_size=40)
         self.cache_manager.set_on_cached_callback(self._on_track_cached_bg)
 
         self.player = MpvPlayer(initial_volume=self.config.get("volume", 80))
@@ -421,7 +425,9 @@ class ScloudPlayerApp(App):
         shortcuts = [
             ("[Space]", "Play / Pause"),
             ("[Enter]", "Play Selected Track"),
-            ("[n] / [p]", "Next / Prev Page (30 Tracks)"),
+            ("[N] / []]", "Next Track"),
+            ("[P] / [[]", "Previous Track"),
+            ("[n] / [p]", "Next / Prev Page (40 Tracks)"),
             ("[<] / [>]", "Seek -5s / +5s"),
             ("[-] / [+]", "Volume Down / Up"),
             ("[a]", "Toggle Autoplay"),
@@ -438,8 +444,8 @@ class ScloudPlayerApp(App):
         return Panel(t, title="[bold yellow]⚡ KEYBOARD SHORTCUTS ⚡[/bold yellow]", border_style="dim cyan")
 
     async def _load_tracks_page_worker(self, url: str, page: int):
-        """Asynchronously fetches a page of 30 tracks, updates table, and starts preloading."""
-        self.query_one("#pagination-bar", Static).update(f" Loading page {page} (max 30 tracks)...")
+        """Asynchronously fetches a page of 40 tracks, updates table, and starts preloading."""
+        self.query_one("#pagination-bar", Static).update(f" Loading page {page} (max 40 tracks)...")
 
         page_data = await asyncio.to_thread(
             fetch_track_page, url, page, self.page_size
@@ -527,7 +533,7 @@ class ScloudPlayerApp(App):
         self.query_one("#transport-bar", TransportBar).update_transport(
             title=curr.get("title", ""),
             artist=curr.get("uploader", ""),
-            time_pos=state.time_pos,
+            time_pos=state.current_time_pos,
             duration=state.duration,
             volume=state.volume,
             is_playing=state.is_playing,
@@ -608,6 +614,37 @@ class ScloudPlayerApp(App):
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_tracks):
             self.selected_track_index = table.cursor_row
             self._play_track_at_index(self.selected_track_index)
+
+    def action_next_track(self) -> None:
+        """Skips immediately to the next track."""
+        if not self.filtered_tracks:
+            return
+        next_index = self.selected_track_index + 1
+        if next_index < len(self.filtered_tracks):
+            self.selected_track_index = next_index
+            self._play_track_at_index(next_index)
+        elif self.track_page and self.track_page.has_next:
+            self.action_next_page()
+            self.selected_track_index = 0
+            self._play_track_at_index(0)
+        elif self.repeat_mode == "all":
+            self.selected_track_index = 0
+            self._play_track_at_index(0)
+
+    def action_prev_track(self) -> None:
+        """Returns to previous track (or restarts current track if >3s elapsed)."""
+        if not self.filtered_tracks:
+            return
+        state = self.player.get_state()
+        if state.current_time_pos > 3.0:
+            self.player.seek_percent(0.0)
+            return
+
+        if self.selected_track_index > 0:
+            self.selected_track_index -= 1
+            self._play_track_at_index(self.selected_track_index)
+        elif self.current_page > 1:
+            self.action_prev_page()
 
     def action_next_page(self) -> None:
         if self.track_page and self.track_page.has_next:

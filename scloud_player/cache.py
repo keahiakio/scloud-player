@@ -42,10 +42,10 @@ def resolve_stream_url(track_url: str, yt_dlp_path: Optional[str] = None) -> Opt
 class SongCacheManager:
     """
     Manages in-memory and persistent caching of stream URLs and metadata for tracks.
-    Runs asynchronous pre-fetching for batches of up to 30 songs.
+    Runs asynchronous pre-fetching for batches of up to 40 songs.
     """
 
-    def __init__(self, cache_size: int = 30, yt_dlp_path: Optional[str] = None):
+    def __init__(self, cache_size: int = 40, yt_dlp_path: Optional[str] = None):
         self.cache_size = cache_size
         self.yt_dlp_path = yt_dlp_path or "yt-dlp"
         self._lock = threading.Lock()
@@ -157,7 +157,7 @@ class SongCacheManager:
 
     def preload_tracks(self, tracks: List[dict], priority_index: int = 0):
         """
-        Preloads up to 30 songs into memory in the background.
+        Preloads up to 40 songs into memory in the background.
         Prioritizes the track at `priority_index` and subsequent tracks.
         """
         if not tracks:

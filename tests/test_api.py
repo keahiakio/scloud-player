@@ -24,11 +24,11 @@ def test_paginated_track_data(mock_run):
     )
     mock_run.return_value = MagicMock(stdout=mock_out)
 
-    tracks = get_track_data("https://soundcloud.com/test", page=2, page_size=30)
+    tracks = get_track_data("https://soundcloud.com/test", page=2, page_size=40)
     assert tracks is not None
     assert len(tracks) == 2
 
     # Check playlist-items parameter in yt-dlp command line
     cmd = mock_run.call_args[0][0]
-    # Page 2 with size 30 means items 31:60
-    assert "31:60" in cmd
+    # Page 2 with size 40 means items 41:80
+    assert "41:80" in cmd

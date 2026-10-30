@@ -11,13 +11,13 @@ A responsive, feature-rich terminal SoundCloud music player inspired by **musikc
   │  │· │ 2 │ Cold Shoulder                  │ Drake        │02:45│  Duration: 03:24         │
   │  │· │ 3 │ Quebec                         │ Drake        │03:10│  Status:   ▶ PLAYING     │
   │  └──┴───┴────────────────────────────────┴──────────────┴─────┘                          │
-  │   Page 1 (30 tracks) | [p] Prev | [n] Next                      ▃▅▇ LIVE CAVA VISUALIZER ▇▅▃
+  │   Page 1 (40 tracks) | [p] Prev | [n] Next                      ▃▅▇ LIVE CAVA VISUALIZER ▇▅▃
   │                                                                     ▅      ▅             │
   │                                                                    ██▆    ██▆ ▄          │
   │                                                                  ▄█████  ███████▄        │
   │                                                                 █████████████████        │
   │  ▶ Solar Eclipse - Drake   01:14 [━━━━━━━━●──────────────] 03:24 Vol: 80% [====-]       │
-  │    [AUTO: ON] [SHUF: OFF] [REP: OFF] [CACHE: 30/30 ⚡]                                    │
+  │    [AUTO: ON] [SHUF: OFF] [REP: OFF] [CACHE: 40/40 ⚡]                                    │
   └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,11 +25,11 @@ A responsive, feature-rich terminal SoundCloud music player inspired by **musikc
 
 ## Key Features
 
-- **Responsive Musikcube-Style TUI**: Multi-panel terminal user interface with adaptive split layout, tracks data table, now playing card, real-time seek bar, and live filter/search.
+- **Responsive Musikcube-Style TUI**: Multi-panel terminal user interface with adaptive split layout, tracks data table, now playing card, real-time live seek bar, and live filter/search.
 - **Live CAVA Spectrum Visualizer**: Integrated directly with `cava` (Console-based Audio Visualizer for PulseAudio/PipeWire), rendering real-time animated frequency bars with vibrant gradient colors (`bold magenta` peak -> `yellow` mid -> `bright blue` base) directly inside the TUI.
-- **Fast 30-Song Paginated Loading**: Loads any SoundCloud URL (track, set, playlist, or user profile) in fast 30-song chunks via `--playlist-items` and batch metadata enrichment (SoundCloud API v2), keeping startup under 2 seconds.
-- **30-Song In-Memory & Disk Stream Preloading**: Background worker pool pre-resolves direct audio streaming URLs for all 30 songs on the page. Transitions between tracks and autoplay take **zero delay**.
-- **Non-blocking MPV Engine via IPC**: Communicates with `mpv` over Unix domain socket JSON IPC for fluid real-time seek bar tracking, volume adjustment, pause/play, and automatic track-end event detection.
+- **Fast 40-Song Paginated Loading**: Loads any SoundCloud URL (track, set, playlist, or user profile) in fast 40-song chunks via `--playlist-items` and batch metadata enrichment (SoundCloud API v2), keeping startup under 2 seconds.
+- **40-Song In-Memory & Disk Stream Preloading**: Background worker pool pre-resolves direct audio streaming URLs for all 40 songs on the page. Transitions between tracks and autoplay take **zero delay**.
+- **Non-blocking MPV Engine via IPC**: Communicates with `mpv` over Unix domain socket JSON IPC for fluid real-time live seek bar tracking, volume adjustment, pause/play, and automatic track-end event detection.
 - **Automated Installer (`install.sh`)**: One-command setup that verifies system dependencies (`mpv`, `cava`, `ffmpeg`), sets up Python virtual environment, installs dependencies, and creates a global `scloud-player` command.
 - **Classic CLI Fallback**: Run with `--cli` for lightweight, non-TUI terminal prompt navigation.
 
@@ -114,9 +114,11 @@ scloud-player --cli "https://soundcloud.com/artist/sets/album"
 |:---:|:---|
 | **`Space`** | Play / Pause current track |
 | **`Enter`** | Play selected track |
+| **`]`** or **`N`** | **Next Track** (skip to next track in queue) |
+| **`[`** or **`P`** | **Previous Track** (previous track or restart) |
 | **`Up` / `Down`** or **`k` / `j`** | Navigate tracklist rows |
-| **`n`** | Next Page (Loads next 30 tracks) |
-| **`p`** | Previous Page (Loads previous 30 tracks) |
+| **`n`** | Next Page (Loads next 40 tracks) |
+| **`p`** | Previous Page (Loads previous 40 tracks) |
 | **`>`** or **`Right`** | Seek forward 5 seconds |
 | **`<`** or **`Left`** | Seek backward 5 seconds |
 | **`+`** / **`-`** | Volume Up / Volume Down (5% increments) |
@@ -134,17 +136,17 @@ Mouse interaction is also supported: click any row in the track table to select 
 
 ---
 
-## 30-Song Caching & Fast Pagination Architecture
+## 40-Song Caching & Fast Pagination Architecture
 
-### Fast 30-Track Batch Loading
+### Fast 40-Track Batch Loading
 When a SoundCloud URL or playlist is provided:
-- `scloud-player` requests exactly 30 items for the active page (`--playlist-items 1:30` on page 1, `31:60` on page 2, etc.) using `yt-dlp`.
+- `scloud-player` requests exactly 40 items for the active page (`--playlist-items 1:40` on page 1, `41:80` on page 2, etc.) using `yt-dlp`.
 - Track titles, uploaders, durations, and permalinks are resolved in parallel via SoundCloud's API v2 batch endpoint (`/tracks?ids=...`), populating the table in under 2 seconds.
 
 ### Zero-Delay Stream Preloading
-- In the background, a multi-threaded preloading queue (`SongCacheManager`) begins resolving the direct HLS/MP3 streaming URLs for all 30 songs on the page.
+- In the background, a multi-threaded preloading queue (`SongCacheManager`) begins resolving the direct HLS/MP3 streaming URLs for all 40 songs on the page.
 - Cached tracks display an electric badge (`⚡`) in the tracklist.
-- When you click a track or autoplay advances, the stream URL is already in memory. Audio begins streaming instantaneously without waiting for network resolution.
+- When you click a track, press Next Track (`]`), or autoplay advances, the stream URL is already in memory. Audio begins streaming instantaneously without waiting for network resolution.
 - Valid stream URLs are also persisted to `~/.cache/scloud-player/stream_cache.json` with a 3-hour TTL.
 
 ---
@@ -169,8 +171,8 @@ Settings are saved in `~/.scloud-player-config.json`. You can modify defaults di
     "player": "mpv",
     "autoplay": false,
     "shuffle": false,
-    "page_size": 30,
-    "cache_size": 30,
+    "page_size": 40,
+    "cache_size": 40,
     "visualizer": "cava",
     "visualizer_bars": 24,
     "fullscreen": true,

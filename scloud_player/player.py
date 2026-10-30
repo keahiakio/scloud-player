@@ -69,15 +69,28 @@ class PlaybackState:
         self.is_playing: bool = False
         self.is_paused: bool = False
         self.time_pos: float = 0.0
+        self.last_time_update: float = 0.0
         self.duration: float = 0.0
         self.volume: float = 80.0
         self.current_track: Optional[dict] = None
         self.idle: bool = True
 
     @property
+    def current_time_pos(self) -> float:
+        """Returns live-interpolated playback position in seconds."""
+        if self.is_playing and not self.is_paused and self.last_time_update > 0:
+            elapsed = time.time() - self.last_time_update
+            est = self.time_pos + min(elapsed, 1.0)
+            if self.duration > 0:
+                return min(est, self.duration)
+            return est
+        return self.time_pos
+
+    @property
     def progress_pct(self) -> float:
-        if self.duration > 0:
-            return min(max(self.time_pos / self.duration, 0.0), 1.0)
+        dur = self.duration
+        if dur > 0:
+            return min(max(self.current_time_pos / dur, 0.0), 1.0)
         return 0.0
 
 
@@ -92,6 +105,7 @@ class MpvPlayer:
         self._lock = threading.Lock()
         self._running = False
         self._req_id = 1
+        self._pending_requests: dict = {}
         self._state = PlaybackState()
         self._state.volume = float(initial_volume)
         self._on_track_end: Optional[Callable[[], None]] = None
@@ -131,7 +145,7 @@ class MpvPlayer:
         )
 
     def _connect_ipc(self, timeout: float = 3.0):
-        """Connects to the mpv IPC domain socket."""
+        """Connects to the mpv IPC domain socket and sets up property observation."""
         start = time.time()
         while time.time() - start < timeout:
             if os.path.exists(self.sock_path):
@@ -141,17 +155,23 @@ class MpvPlayer:
                     s.settimeout(0.5)
                     self._sock = s
                     self._running = True
+                    # Register property observers for push notifications
+                    for idx, prop in enumerate(["time-pos", "duration", "pause", "volume", "idle-active"], start=1):
+                        payload = json.dumps({"command": ["observe_property", idx, prop]}) + "\n"
+                        self._sock.sendall(payload.encode("utf-8"))
                     return
                 except (socket.error, OSError):
                     pass
             time.sleep(0.05)
 
-    def _send_command(self, cmd_list: list) -> Optional[dict]:
+    def _send_command(self, cmd_list: list, prop_name: Optional[str] = None) -> Optional[dict]:
         """Sends an IPC JSON command and returns response data if available."""
         with self._lock:
             if not self._sock or not self._running:
                 return None
             self._req_id += 1
+            if prop_name:
+                self._pending_requests[self._req_id] = prop_name
             payload = json.dumps({"command": cmd_list, "request_id": self._req_id}) + "\n"
             try:
                 self._sock.sendall(payload.encode("utf-8"))
@@ -161,15 +181,7 @@ class MpvPlayer:
 
     def _query_property(self, prop_name: str):
         """Queries an mpv property synchronously."""
-        with self._lock:
-            if not self._sock or not self._running:
-                return None
-            self._req_id += 1
-            payload = json.dumps({"command": ["get_property", prop_name], "request_id": self._req_id}) + "\n"
-            try:
-                self._sock.sendall(payload.encode("utf-8"))
-            except Exception:
-                return None
+        self._send_command(["get_property", prop_name], prop_name=prop_name)
 
     def _ipc_listener_loop(self):
         """Continuously listens to mpv IPC events and status updates."""
@@ -181,11 +193,11 @@ class MpvPlayer:
                 now = time.time()
                 if now - last_poll >= 0.25:
                     last_poll = now
-                    self._send_command(["get_property", "time-pos"])
-                    self._send_command(["get_property", "duration"])
-                    self._send_command(["get_property", "pause"])
-                    self._send_command(["get_property", "volume"])
-                    self._send_command(["get_property", "idle-active"])
+                    self._send_command(["get_property", "time-pos"], prop_name="time-pos")
+                    self._send_command(["get_property", "duration"], prop_name="duration")
+                    self._send_command(["get_property", "pause"], prop_name="pause")
+                    self._send_command(["get_property", "volume"], prop_name="volume")
+                    self._send_command(["get_property", "idle-active"], prop_name="idle-active")
 
                 if not self._sock:
                     time.sleep(0.1)
@@ -218,7 +230,26 @@ class MpvPlayer:
             return
 
         event = msg.get("event")
-        if event == "end-file":
+        if event == "property-change":
+            name = msg.get("name")
+            data = msg.get("data")
+            if name == "time-pos" and data is not None:
+                self._state.time_pos = float(data)
+                self._state.last_time_update = time.time()
+            elif name == "duration" and data is not None:
+                d = float(data)
+                if d > 0:
+                    self._state.duration = d
+            elif name == "pause" and data is not None:
+                self._state.is_paused = bool(data)
+            elif name == "volume" and data is not None:
+                self._state.volume = float(data)
+            elif name == "idle-active" and data is not None:
+                self._state.idle = bool(data)
+                if self._state.idle:
+                    self._state.is_playing = False
+
+        elif event == "end-file":
             reason = msg.get("reason")
             # If track finished naturally (eof), notify listener for autoplay
             if reason == "eof":
@@ -226,25 +257,36 @@ class MpvPlayer:
                 self._state.idle = True
                 if self._on_track_end:
                     threading.Thread(target=self._on_track_end, daemon=True).start()
-            elif reason == "quit" or reason == "error":
+            elif reason in ("quit", "error"):
                 self._state.is_playing = False
                 self._state.idle = True
 
         elif event == "playback-restart":
             self._state.is_playing = True
             self._state.idle = False
+            self._state.last_time_update = time.time()
 
-        # Property reply handling
-        if "data" in msg:
-            data = msg["data"]
-            # Detect what property was queried
-            if isinstance(data, (int, float)):
-                if data > 1000 and self._state.duration == 0:
-                    self._state.duration = float(data)
-                elif data <= 100 and msg.get("request_id") and self._state.volume != data and isinstance(data, (int, float)):
-                    pass  # Volume or time-pos
-            if isinstance(data, bool):
-                self._state.is_paused = data
+        # Property reply handling via request_id
+        req_id = msg.get("request_id")
+        if req_id and req_id in self._pending_requests:
+            prop = self._pending_requests.pop(req_id)
+            data = msg.get("data")
+            if data is not None:
+                if prop == "time-pos":
+                    self._state.time_pos = float(data)
+                    self._state.last_time_update = time.time()
+                elif prop == "duration":
+                    d = float(data)
+                    if d > 0:
+                        self._state.duration = d
+                elif prop == "pause":
+                    self._state.is_paused = bool(data)
+                elif prop == "volume":
+                    self._state.volume = float(data)
+                elif prop == "idle-active":
+                    self._state.idle = bool(data)
+                    if self._state.idle:
+                        self._state.is_playing = False
 
     def play(self, stream_url: str, track_metadata: Optional[dict] = None):
         """Loads and starts playing a stream URL."""
@@ -252,6 +294,7 @@ class MpvPlayer:
         self._state.is_playing = True
         self._state.is_paused = False
         self._state.time_pos = 0.0
+        self._state.last_time_update = time.time()
         self._state.duration = float(track_metadata.get("duration") or 0.0) if track_metadata else 0.0
         self._state.idle = False
 
@@ -265,28 +308,36 @@ class MpvPlayer:
     def resume(self):
         """Resumes playback."""
         self._state.is_paused = False
+        self._state.last_time_update = time.time()
         self._send_command(["set_property", "pause", False])
 
     def toggle_pause(self):
         """Toggles play/pause state."""
         self._state.is_paused = not self._state.is_paused
+        if not self._state.is_paused:
+            self._state.last_time_update = time.time()
         self._send_command(["cycle", "pause"])
 
     def stop(self):
         """Stops audio playback."""
         self._state.is_playing = False
         self._state.is_paused = False
+        self._state.time_pos = 0.0
         self._state.idle = True
         self._send_command(["stop"])
 
     def seek(self, seconds: float):
         """Seeks relative to current position."""
         self._send_command(["seek", seconds, "relative"])
-        self._state.time_pos = max(0.0, self._state.time_pos + seconds)
+        self._state.time_pos = max(0.0, self._state.current_time_pos + seconds)
+        self._state.last_time_update = time.time()
 
     def seek_percent(self, pct: float):
         """Seeks to absolute percentage (0-100)."""
         self._send_command(["seek", pct, "absolute-percent"])
+        if self._state.duration > 0:
+            self._state.time_pos = (pct / 100.0) * self._state.duration
+            self._state.last_time_update = time.time()
 
     def set_volume(self, volume: float):
         """Sets playback volume (0 to 100)."""
