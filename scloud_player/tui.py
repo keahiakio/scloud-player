@@ -43,13 +43,13 @@ from scloud_player.api import (
     get_stream_url,
 )
 from scloud_player.cache import SongCacheManager
-from scloud_player.config import load_config, save_config
+from scloud_player.config import add_url_to_history, load_config, load_url_history, save_config
 from scloud_player.player import MpvPlayer
 from scloud_player.visualizer import VisualizerEngine
 
 
 class UrlModal(ModalScreen[Optional[str]]):
-    """Modal dialog for entering a new SoundCloud URL."""
+    """Modal dialog for entering a new SoundCloud URL with Up/Down history navigation."""
 
     DEFAULT_CSS = """
     UrlModal {
@@ -59,10 +59,15 @@ class UrlModal(ModalScreen[Optional[str]]):
 
     #url-dialog {
         padding: 1 2;
-        width: 75;
+        width: 80;
         height: auto;
         border: thick $primary;
         background: $surface;
+    }
+
+    #url-history-hint {
+        margin-top: 1;
+        color: $text-muted;
     }
 
     #url-buttons {
@@ -75,6 +80,18 @@ class UrlModal(ModalScreen[Optional[str]]):
     }
     """
 
+    BINDINGS = [
+        Binding("up", "history_prev", "Previous History URL", priority=True),
+        Binding("down", "history_next", "Next History URL", priority=True),
+        Binding("escape", "cancel", "Cancel", priority=True),
+    ]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.history: List[str] = load_url_history()
+        self.history_index: int = len(self.history)
+        self._temp_input: str = ""
+
     def compose(self) -> ComposeResult:
         with Vertical(id="url-dialog"):
             yield Label("[bold cyan]Enter SoundCloud URL or Playlist:[/bold cyan]")
@@ -82,6 +99,9 @@ class UrlModal(ModalScreen[Optional[str]]):
                 placeholder="https://soundcloud.com/artist or track/set URL",
                 id="url-input"
             )
+            count = len(self.history)
+            hint = f"↑ / ↓ scroll history ({count} saved) | Enter load | Esc cancel"
+            yield Label(f"[dim]{hint}[/dim]", id="url-history-hint")
             with Horizontal(id="url-buttons"):
                 yield Button("Load", variant="primary", id="btn-load")
                 yield Button("Cancel", variant="default", id="btn-cancel")
@@ -89,15 +109,49 @@ class UrlModal(ModalScreen[Optional[str]]):
     def on_mount(self) -> None:
         self.query_one("#url-input", Input).focus()
 
+    def action_history_prev(self) -> None:
+        """Navigates to previous URL in history (older)."""
+        if not self.history:
+            return
+        inp = self.query_one("#url-input", Input)
+        if self.history_index == len(self.history):
+            self._temp_input = inp.value
+
+        if self.history_index > 0:
+            self.history_index -= 1
+            inp.value = self.history[self.history_index]
+            inp.cursor_position = len(inp.value)
+
+    def action_history_next(self) -> None:
+        """Navigates to next URL in history (newer)."""
+        if not self.history:
+            return
+        inp = self.query_one("#url-input", Input)
+        if self.history_index < len(self.history) - 1:
+            self.history_index += 1
+            inp.value = self.history[self.history_index]
+            inp.cursor_position = len(inp.value)
+        elif self.history_index == len(self.history) - 1:
+            self.history_index = len(self.history)
+            inp.value = self._temp_input
+            inp.cursor_position = len(inp.value)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-load":
             val = self.query_one("#url-input", Input).value.strip()
+            if val:
+                add_url_to_history(val)
             self.dismiss(val if val else None)
         else:
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         val = event.value.strip()
+        if val:
+            add_url_to_history(val)
         self.dismiss(val if val else None)
 
 
@@ -364,6 +418,8 @@ class ScloudPlayerApp(App):
         self.config = load_config()
         self.initial_url = initial_url or "https://soundcloud.com/discover"
         self.current_url = self.initial_url
+        if self.initial_url and "discover" not in self.initial_url:
+            add_url_to_history(self.initial_url)
 
         self.current_page = 1
         self.page_size = 40
@@ -722,6 +778,7 @@ class ScloudPlayerApp(App):
         """Opens interactive modal dialog to load a new SoundCloud URL."""
         def handle_url_result(url: Optional[str]):
             if url:
+                add_url_to_history(url)
                 self.run_worker(self._load_tracks_page_worker(url, page=1), exclusive=True)
 
         self.push_screen(UrlModal(), handle_url_result)

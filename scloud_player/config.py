@@ -12,6 +12,7 @@ import shutil
 
 CONFIG_FILE = os.path.expanduser("~/.scloud-player-config.json")
 HISTORY_FILE = os.path.expanduser("~/.scloud-player-history")
+URL_HISTORY_FILE = os.path.expanduser("~/.scloud-player-url-history")
 CACHE_DIR = os.path.expanduser("~/.cache/scloud-player")
 
 DEFAULT_CONFIG = {
@@ -86,5 +87,69 @@ def save_config(config, config_file=None):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
+    except Exception:
+        pass
+
+
+def load_url_history() -> list:
+    """Loads previously used SoundCloud URLs in chronological order (oldest to newest)."""
+    urls: list = []
+
+    # 1. Load from dedicated URL history file if it exists
+    if os.path.exists(URL_HISTORY_FILE):
+        try:
+            with open(URL_HISTORY_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    u = line.strip()
+                    if u and u not in urls:
+                        urls.append(u)
+        except Exception:
+            pass
+
+    # 2. Also backfill from ~/.scloud-player-history if missing or short
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    u = line.strip()
+                    if not u:
+                        continue
+                    if "soundcloud" in u.lower() or u.startswith("http") or (u.count("/") >= 2 and not u.startswith("/")):
+                        if u in urls:
+                            urls.remove(u)
+                        urls.append(u)
+        except Exception:
+            pass
+
+    return urls
+
+
+def add_url_to_history(url: str):
+    """Adds a URL to persistent history, deduplicating so it becomes the latest entry."""
+    u = url.strip()
+    if not u:
+        return
+
+    urls = load_url_history()
+    if u in urls:
+        urls.remove(u)
+    urls.append(u)
+
+    # Keep at most 500 entries
+    if len(urls) > 500:
+        urls = urls[-500:]
+
+    try:
+        os.makedirs(os.path.dirname(URL_HISTORY_FILE), exist_ok=True)
+        with open(URL_HISTORY_FILE, "w", encoding="utf-8") as f:
+            for item in urls:
+                f.write(f"{item}\n")
+    except Exception:
+        pass
+
+    # Also append to HISTORY_FILE so CLI readline has it
+    try:
+        with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{u}\n")
     except Exception:
         pass
