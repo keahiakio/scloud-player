@@ -230,3 +230,68 @@ def test_visualizer_and_now_playing_responsive():
                 assert np_card.render() is not None
 
     asyncio.run(_async_run())
+
+
+def test_tui_focus_and_clean_exit_keys():
+    async def _async_run():
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[{"id": "1", "title": "Track 1", "uploader": "Artist", "duration": 150}],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="Test",
+                total_tracks=1
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                # Tracks table must be focused by default so navigation works immediately
+                assert app.focused.id == "tracks-table"
+
+                # Focus filter search box
+                app.action_focus_filter()
+                await pilot.pause()
+                assert app.focused.id == "search-box"
+
+                # Pressing escape in filter returns focus to table
+                app.action_clear_filter()
+                await pilot.pause()
+                assert app.focused.id == "tracks-table"
+
+                # Exit cleanly on q
+                await pilot.press("q")
+
+    asyncio.run(_async_run())
+
+
+def test_tui_empty_tracks_placeholder():
+    async def _async_run():
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="",
+                total_tracks=0
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                from textual.widgets import DataTable
+                table = app.query_one("#tracks-table", DataTable)
+                # Table should contain a helpful prompt instead of being an uncommunicative blank
+                assert table.row_count == 1
+                assert "No tracks found" in str(table.get_row_at(0))
+
+    asyncio.run(_async_run())

@@ -7,6 +7,7 @@ Provides non-blocking transport controls, seek bar status polling,
 and automatic end-of-track event handling for autoplay.
 """
 
+import atexit
 import json
 import os
 import socket
@@ -114,6 +115,9 @@ class MpvPlayer:
         self._start_mpv()
         self._connect_ipc()
 
+        # Clean up mpv process automatically on interpreter shutdown
+        atexit.register(self.shutdown)
+
         # Background listener thread for MPV IPC events & status
         self._listener_thread = threading.Thread(target=self._ipc_listener_loop, daemon=True)
         self._listener_thread.start()
@@ -156,6 +160,8 @@ class MpvPlayer:
         """Connects to the mpv IPC domain socket and sets up property observation."""
         start = time.time()
         while time.time() - start < timeout:
+            if self._proc and self._proc.poll() is not None:
+                break
             if os.path.exists(self.sock_path):
                 try:
                     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -214,6 +220,9 @@ class MpvPlayer:
                 try:
                     data = self._sock.recv(4096)
                     if not data:
+                        if self._proc and self._proc.poll() is not None:
+                            self._running = False
+                            break
                         time.sleep(0.05)
                         continue
                     buffer += data.decode("utf-8", errors="ignore")
@@ -369,6 +378,10 @@ class MpvPlayer:
         """Shuts down mpv process and cleans up IPC domain socket."""
         self._running = False
         try:
+            atexit.unregister(self.shutdown)
+        except Exception:
+            pass
+        try:
             self._send_command(["quit"])
         except Exception:
             pass
@@ -385,6 +398,7 @@ class MpvPlayer:
             except Exception:
                 try:
                     self._proc.kill()
+                    self._proc.wait(timeout=0.5)
                 except Exception:
                     pass
             self._proc = None

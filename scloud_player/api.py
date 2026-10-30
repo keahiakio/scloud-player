@@ -190,7 +190,7 @@ def get_track_data(
             f"{start_idx}:{end_idx}",
             url,
         ]
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=20)
 
         tracks = []
         for line in result.stdout.strip().split("\n"):
@@ -204,9 +204,7 @@ def get_track_data(
         if tracks:
             enrich_tracks_metadata(tracks)
         return tracks
-    except subprocess.CalledProcessError as e:
-        return None
-    except FileNotFoundError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
 
@@ -244,7 +242,7 @@ def get_full_track_info(track_url: str, yt_dlp_path: Optional[str] = None) -> Op
 
     try:
         command = [yt_dlp_path, "-j", "--no-update", track_url]
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=15)
         return json.loads(result.stdout.strip())
     except Exception:
         return None

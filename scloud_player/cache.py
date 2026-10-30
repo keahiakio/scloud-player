@@ -72,7 +72,7 @@ def resolve_stream_url(track_url: str, yt_dlp_path: Optional[str] = None) -> Opt
 
     try:
         cmd = [yt_dlp_path, "-g", "--no-update", track_url]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=15)
         out = res.stdout.strip()
         if out:
             # yt-dlp might return multiple stream URLs separated by newline; the first audio stream is best
@@ -287,3 +287,10 @@ class SongCacheManager:
                 os.remove(DISK_CACHE_FILE)
             except Exception:
                 pass
+
+    def shutdown(self):
+        """Cancels preloader background tasks and shuts down executor."""
+        try:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass

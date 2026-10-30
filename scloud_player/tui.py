@@ -719,14 +719,20 @@ class ScloudPlayerApp(App):
         Binding("escape", "clear_filter", "Clear Filter"),
         Binding("question_mark", "show_credits", "Credits & Help"),
         Binding("f1", "show_credits", "Credits & Help"),
+        Binding("ctrl+c", "quit_app", "Quit", priority=True),
+        Binding("ctrl+q", "quit_app", "Quit", priority=True),
         Binding("q", "quit_app", "Quit"),
     ]
 
     def __init__(self, initial_url: Optional[str] = None):
         super().__init__()
         self.config = load_config()
-        self.initial_url = initial_url or "https://soundcloud.com/discover"
-        self.current_url = self.initial_url
+        if initial_url:
+            self.initial_url = initial_url
+        else:
+            hist = load_url_history()
+            self.initial_url = hist[-1] if hist else None
+        self.current_url = self.initial_url or ""
         if self.initial_url and "discover" not in self.initial_url:
             add_url_to_history(self.initial_url)
 
@@ -755,6 +761,8 @@ class ScloudPlayerApp(App):
         self._term_width = 100
         self._term_height = 30
         self._tick_timer = None
+        self._idle_ticks = 0
+        self._last_playing = False
 
     @property
     def effective_view_mode(self) -> str:
@@ -779,8 +787,12 @@ class ScloudPlayerApp(App):
 
         try:
             base = self.screen_stack[0] if self.screen_stack else self.screen
-            if mode == "tracks":
-                table = base.query_one("#tracks-table", DataTable)
+            table = base.query_one("#tracks-table", DataTable)
+            try:
+                search_box = base.query_one("#search-box", Input)
+                if not search_box.has_focus and not table.has_focus:
+                    table.focus()
+            except Exception:
                 if not table.has_focus:
                     table.focus()
         except Exception:
@@ -876,11 +888,17 @@ class ScloudPlayerApp(App):
         self._apply_view_layout(self._term_width)
         self._update_top_bar(self._term_width)
 
+        # Focus table by default so navigation hotkeys and quit (q) work immediately
+        table.focus()
+
         # Start periodic UI update tick (20 FPS for smooth progress and visualizer)
         self._tick_timer = self.set_interval(0.05, self._on_ui_tick)
 
-        # Load initial URL in background worker
-        self.run_worker(self._load_tracks_page_worker(self.current_url, page=1), exclusive=True)
+        # Load initial URL in background worker or prompt user if none available
+        if self.current_url:
+            self.run_worker(self._load_tracks_page_worker(self.current_url, page=1), exclusive=True)
+        else:
+            self.action_load_url()
 
     def _build_shortcuts_cheatsheet(self) -> Panel:
         t = Table.grid(padding=(0, 2))
@@ -910,7 +928,7 @@ class ScloudPlayerApp(App):
 
         return Panel(t, title="[bold yellow]⚡ KEYBOARD SHORTCUTS ⚡[/bold yellow]", border_style="dim cyan")
 
-    async def _load_tracks_page_worker(self, url: str, page: int):
+    async def _load_tracks_page_worker(self, url: str, page: int, auto_play_first: bool = False):
         """Asynchronously fetches a page of 40 tracks, updates table, and starts preloading."""
         base = self.screen_stack[0] if self.screen_stack else self.screen
         try:
@@ -932,7 +950,11 @@ class ScloudPlayerApp(App):
         self._populate_table()
 
         # Kick off background pre-cache for the 40 songs
-        self.cache_manager.preload_tracks(self.filtered_tracks, priority_index=self.selected_track_index)
+        if self.filtered_tracks:
+            self.cache_manager.preload_tracks(self.filtered_tracks, priority_index=self.selected_track_index)
+            if auto_play_first:
+                self.selected_track_index = 0
+                self._play_track_at_index(0)
 
     def _populate_table(self):
         """Fills DataTable with current tracks."""
@@ -943,6 +965,15 @@ class ScloudPlayerApp(App):
             return
 
         table.clear()
+
+        if not self.filtered_tracks:
+            table.add_row(" ", "·", "No tracks found", "Press [l] to enter URL", "0:00", "·", key="empty")
+            try:
+                pagination = base.query_one("#pagination-bar", Static)
+                pagination.update(Text(" No tracks found. Press [l] to load a SoundCloud playlist or artist URL.", style="bold yellow"))
+            except Exception:
+                pass
+            return
 
         start_num = (self.current_page - 1) * self.page_size + 1
         active_track = self.player.get_state().current_track
@@ -1023,6 +1054,16 @@ class ScloudPlayerApp(App):
         state = self.player.get_state()
         base = self.screen_stack[0] if self.screen_stack else self.screen
 
+        is_active = state.is_playing or state.is_paused
+        # Throttle updates when idle to save CPU
+        if not is_active:
+            self._idle_ticks += 1
+            if not self._last_playing and (self._idle_ticks % 10 != 0):
+                return
+        else:
+            self._idle_ticks = 0
+        self._last_playing = is_active
+
         # Update Visualizer
         try:
             vis_widget = base.query_one("#visualizer-card", VisualizerWidget)
@@ -1102,10 +1143,7 @@ class ScloudPlayerApp(App):
             self.selected_track_index = 0
             self._play_track_at_index(0)
         elif self.track_page and self.track_page.has_next:
-            # Advance to next page of 30 tracks
-            self.action_next_page()
-            self.selected_track_index = 0
-            self._play_track_at_index(0)
+            self.action_next_page(auto_play_first=True)
 
     def _play_track_at_index(self, index: int):
         """Plays track at specific index using cached stream URL."""
@@ -1133,12 +1171,21 @@ class ScloudPlayerApp(App):
             self.player.play(stream_url, track)
             self._populate_table()
         else:
+            title = track.get("title", "track")
+            self.notify(f"Resolving audio stream for '{title}'...", timeout=3.0)
             # Resolve synchronously in background thread
             def do_resolve_and_play():
                 url = self.cache_manager.get_stream_url(track, fallback_resolve=True)
                 if url:
                     self.player.play(url, track)
                     self.call_from_thread(self._populate_table)
+                else:
+                    self.call_from_thread(
+                        self.notify,
+                        f"Could not resolve audio stream for '{title}'",
+                        severity="error",
+                        timeout=4.0
+                    )
 
             threading.Thread(target=do_resolve_and_play, daemon=True).start()
 
@@ -1150,6 +1197,9 @@ class ScloudPlayerApp(App):
             self.player.toggle_pause()
 
     def action_play_selected(self) -> None:
+        if not self.filtered_tracks:
+            self.action_load_url()
+            return
         base = self.screen_stack[0] if self.screen_stack else self.screen
         try:
             table = base.query_one("#tracks-table", DataTable)
@@ -1168,9 +1218,7 @@ class ScloudPlayerApp(App):
             self.selected_track_index = next_index
             self._play_track_at_index(next_index)
         elif self.track_page and self.track_page.has_next:
-            self.action_next_page()
-            self.selected_track_index = 0
-            self._play_track_at_index(0)
+            self.action_next_page(auto_play_first=True)
         elif self.repeat_mode == "all":
             self.selected_track_index = 0
             self._play_track_at_index(0)
@@ -1190,10 +1238,13 @@ class ScloudPlayerApp(App):
         elif self.current_page > 1:
             self.action_prev_page()
 
-    def action_next_page(self) -> None:
+    def action_next_page(self, auto_play_first: bool = False) -> None:
         if self.track_page and self.track_page.has_next:
             next_p = self.current_page + 1
-            self.run_worker(self._load_tracks_page_worker(self.current_url, page=next_p), exclusive=True)
+            self.run_worker(
+                self._load_tracks_page_worker(self.current_url, page=next_p, auto_play_first=auto_play_first),
+                exclusive=True
+            )
 
     def action_prev_page(self) -> None:
         if self.current_page > 1:
@@ -1305,8 +1356,19 @@ class ScloudPlayerApp(App):
                 ]
             self._populate_table()
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "search-box":
+            base = self.screen_stack[0] if self.screen_stack else self.screen
+            try:
+                base.query_one("#tracks-table", DataTable).focus()
+            except Exception:
+                pass
+
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         try:
+            if str(event.row_key.value) == "empty":
+                self.action_load_url()
+                return
             row_idx = int(event.row_key.value)
             self.selected_track_index = row_idx
             self._play_track_at_index(row_idx)
@@ -1318,6 +1380,12 @@ class ScloudPlayerApp(App):
         self.push_screen(CreditsModal())
 
     def action_quit_app(self) -> None:
+        if self._tick_timer:
+            try:
+                self._tick_timer.pause()
+            except Exception:
+                pass
+        self.cache_manager.shutdown()
         self.player.shutdown()
         self.visualizer_engine.stop()
         self.exit(0)

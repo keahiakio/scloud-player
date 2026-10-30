@@ -146,3 +146,9 @@ def test_disk_cache_prunes_expired(tmp_path):
         mgr = SongCacheManager(cache_size=40)
         assert not mgr.has_stream_url({"id": "expired_song"})
         assert mgr.has_stream_url({"id": "valid_song"})
+
+
+def test_cache_manager_shutdown(tmp_path):
+    with patch("scloud_player.cache.DISK_CACHE_FILE", str(tmp_path / "cache.json")):
+        mgr = SongCacheManager()
+        mgr.shutdown()

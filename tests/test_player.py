@@ -72,3 +72,16 @@ def test_player_error_callback():
         time.sleep(0.1)
         assert len(error_called) == 1
         assert error_called[0] == track
+
+
+@patch("scloud_player.player.subprocess.Popen")
+def test_mpv_player_init_and_shutdown(mock_popen):
+    from scloud_player.player import MpvPlayer
+    proc = MagicMock()
+    proc.poll.return_value = 0
+    mock_popen.return_value = proc
+
+    player = MpvPlayer()
+    assert player.get_state().volume == 80.0
+    player.shutdown()
+    assert player._running is False
