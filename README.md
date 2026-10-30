@@ -25,7 +25,7 @@ A responsive, feature-rich terminal SoundCloud music player inspired by **musikc
 
 ## Key Features
 
-- **Dynamic Resizing & Responsive Musikcube-Style TUI**: Multi-panel terminal user interface that dynamically adapts to any window or screen size (80x24 standard terminals, tmux/kitty split panes, and ultra-compact displays). Supports 1-click view switching (`Tab` / `m`) between Fullscreen Tracks, Fullscreen Visualizer, and Dual-Column Split mode.
+- **Dynamic Resizing & Responsive Musikcube-Style TUI**: Multi-panel terminal user interface that dynamically adapts to any window or screen size (80x24 standard terminals, tmux/kitty split panes, and ultra-compact displays). Supports 1-click view switching (`Tab` / `m`) between Tracks (retaining the sidebar if room allows), Fullscreen Visualizer, and Dual-Column Split mode.
 - **Adaptive Visualizer & Transport Bar**: Real-time frequency bars (6 to 36 bars) and transport controls automatically scale to fit available terminal width and height without line-wrapping, overflow, or clipping.
 - **Live CAVA Spectrum Visualizer**: Integrated directly with `cava` (Console-based Audio Visualizer for PulseAudio/PipeWire), rendering real-time animated frequency bars with vibrant gradient colors (`bold magenta` peak -> `yellow` mid -> `bright blue` base) directly inside the TUI.
 - **Fast 40-Song Paginated Loading**: Loads any SoundCloud URL (track, set, playlist, or user profile) in fast 40-song chunks via `--playlist-items` and batch metadata enrichment (SoundCloud API v2), keeping startup under 2 seconds.
@@ -143,7 +143,7 @@ Mouse interaction is also supported: click any row in the track table to select 
 `scloud-player` features an intelligent, multi-tier responsive layout system designed to look great on any terminal size, from full 4K monitors to 80x24 standard terminals, tmux/kitty split panes, and compact laptop windows:
 
 - **View Mode Switching (`Tab` or `m`)**:
-  - **`Tracks` View**: Expands the track library to 100% width, showing full titles, artists, duration, and stream caching indicators. Perfect for compact terminals or browsing large playlists.
+  - **`Tracks` View**: Focuses on the track library. Keeps the Now Playing metadata and live CAVA visualizer sidebar visible side-by-side if room allows ($\ge 85$ columns), automatically collapsing the sidebar to give tracks 100% width on narrow screens ($< 85$ columns).
   - **`Visualizer` View**: Expands the Now Playing metadata card and live CAVA spectrum visualizer to 100% width with high-resolution multi-column bars.
   - **`Split` View**: Dual-column Musikcube layout with side-by-side library and visualizer panels.
   - **`Auto` Mode (Default)**: Automatically selects `Split` on screens $\ge 85$ columns and switches to `Tracks` on narrow screens ($< 85$ columns).

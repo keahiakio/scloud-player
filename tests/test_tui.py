@@ -138,8 +138,21 @@ def test_tui_view_mode_cycling():
                 app.action_cycle_view()
                 assert app.view_mode == "tracks"
                 await pilot.pause()
+                # On tracks tab: if room allows (size 100x30), sidebar is KEPT!
+                assert app.query_one("#left-panel").display is True
+                assert app.query_one("#right-panel").display is True
+
+                # When resized to narrow (80x24), room does not allow, so sidebar hides:
+                await pilot.resize_terminal(80, 24)
+                await pilot.pause()
                 assert app.query_one("#left-panel").display is True
                 assert app.query_one("#right-panel").display is False
+
+                # Restore size to 100x30: sidebar reappears
+                await pilot.resize_terminal(100, 30)
+                await pilot.pause()
+                assert app.query_one("#left-panel").display is True
+                assert app.query_one("#right-panel").display is True
 
                 # Cycle: tracks -> visualizer
                 app.action_cycle_view()

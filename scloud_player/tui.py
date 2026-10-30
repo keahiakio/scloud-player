@@ -591,15 +591,33 @@ class ScloudPlayerApp(App):
     }
 
     /* ==================== VIEW MODES ==================== */
+    /* Tracks view: keep sidebar if room allows (width >= 85), collapse to full width on narrow */
     .-view-tracks #left-panel {
+        width: 62%;
+        border-right: solid #2c3549;
+        display: block;
+    }
+    .-view-tracks #right-panel {
+        width: 38%;
+        display: block;
+    }
+
+    .-narrow.-view-tracks #left-panel,
+    .-view-tracks.-narrow #left-panel,
+    Screen.-narrow.-view-tracks #left-panel,
+    Screen.-view-tracks.-narrow #left-panel {
         width: 100%;
         border-right: none;
         display: block;
     }
-    .-view-tracks #right-panel {
+    .-narrow.-view-tracks #right-panel,
+    .-view-tracks.-narrow #right-panel,
+    Screen.-narrow.-view-tracks #right-panel,
+    Screen.-view-tracks.-narrow #right-panel {
         display: none;
     }
 
+    /* Visualizer view: full width visualizer, hide tracklist */
     .-view-visualizer #left-panel {
         display: none;
     }
@@ -608,6 +626,7 @@ class ScloudPlayerApp(App):
         display: block;
     }
 
+    /* Split view: dual column layout */
     .-view-split #left-panel {
         width: 60%;
         border-right: solid #2c3549;
@@ -616,6 +635,20 @@ class ScloudPlayerApp(App):
     .-view-split #right-panel {
         width: 40%;
         display: block;
+    }
+    .-narrow.-view-split #left-panel,
+    .-view-split.-narrow #left-panel,
+    Screen.-narrow.-view-split #left-panel,
+    Screen.-view-split.-narrow #left-panel {
+        width: 100%;
+        border-right: none;
+        display: block;
+    }
+    .-narrow.-view-split #right-panel,
+    .-view-split.-narrow #right-panel,
+    Screen.-narrow.-view-split #right-panel,
+    Screen.-view-split.-narrow #right-panel {
+        display: none;
     }
 
     /* ==================== RESPONSIVE BREAKPOINTS ==================== */
@@ -831,6 +864,12 @@ class ScloudPlayerApp(App):
         self.set_class(self._term_width < 65, "-ultra-narrow")
         self.set_class(self._term_height < 26, "-short")
         self.set_class(self._term_height < 18, "-ultra-short")
+
+        if self.screen:
+            self.screen.set_class(self._term_width < 85, "-narrow")
+            self.screen.set_class(self._term_width < 65, "-ultra-narrow")
+            self.screen.set_class(self._term_height < 26, "-short")
+            self.screen.set_class(self._term_height < 18, "-ultra-short")
 
         self._apply_view_layout(self._term_width)
         self._update_top_bar(self._term_width)
