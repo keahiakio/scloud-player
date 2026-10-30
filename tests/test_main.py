@@ -50,7 +50,6 @@ def test_get_track_data_command(mock_run):
     assert "--flat-playlist" in command
     assert url in command
 
-
 @patch("main._get_soundcloud_ie")
 def test_enrich_tracks_metadata(mock_get_ie):
     from main import enrich_tracks_metadata
@@ -95,4 +94,21 @@ def test_enrich_tracks_metadata(mock_get_ie):
     mock_ie._call_api.reset_mock()
     enrich_tracks_metadata(tracks)
     mock_ie._call_api.assert_not_called()
+
+def test_get_visualizer_args():
+    from main import get_visualizer_args
+    
+    # Spectrum mode
+    args = get_visualizer_args("spectrum", "Song Title", "Artist Name", fullscreen=True)
+    assert any("--lavfi-complex=" in a for a in args)
+    assert "--fs" in args
+    assert any("Song Title" in a for a in args)
+    assert any("Artist Name" in a for a in args)
+
+    # Off mode
+    assert get_visualizer_args("off", "Title", "Artist") == []
+
+    # Caca mode
+    caca_args = get_visualizer_args("caca", "Title", "Artist")
+    assert "--vo=caca" in caca_args
 

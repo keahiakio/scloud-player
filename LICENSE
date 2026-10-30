@@ -9,9 +9,12 @@ at your option.
 
 ### Third-Party Licenses & Compliance
 
-This tool interacts with and depends on the following software:
+This tool interacts with and depends on the following open source software:
 
-- **requests**: Apache-2.0 (<https://github.com/psf/requests>)
-- **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>)
-- **rich**: MIT (<https://github.com/Textualize/rich>)
-- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (external CLI player executed via subprocess, independent runtime)
+- **textual**: MIT License (<https://github.com/Textualize/textual>) - Modern terminal user interface framework.
+- **rich**: MIT License (<https://github.com/Textualize/rich>) - Terminal formatting, table rendering, and styled text.
+- **yt-dlp**: The Unlicense (<https://github.com/yt-dlp/yt-dlp>) - Audio stream and metadata extractor.
+- **requests**: Apache License 2.0 (<https://github.com/psf/requests>) - HTTP client library.
+- **cava**: MIT License (<https://github.com/karlstav/cava>) - Console-based Audio Visualizer executed as a separate subprocess.
+- **mpv**: GPL-2.0-or-later / LGPL-2.1-or-later (<https://github.com/mpv-player/mpv>) - Media player daemon controlled via external JSON IPC over Unix domain socket.
+- **ffmpeg**: LGPL-2.1-or-later / GPL-2.0-or-later (<https://ffmpeg.org>) - Multimedia processing toolkit (optional helper for stream decoding).
