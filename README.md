@@ -25,7 +25,8 @@ A responsive, feature-rich terminal SoundCloud music player inspired by **musikc
 
 ## Key Features
 
-- **Responsive Musikcube-Style TUI**: Multi-panel terminal user interface with adaptive split layout, tracks data table, now playing card, real-time live seek bar, and live filter/search.
+- **Dynamic Resizing & Responsive Musikcube-Style TUI**: Multi-panel terminal user interface that dynamically adapts to any window or screen size (80x24 standard terminals, tmux/kitty split panes, and ultra-compact displays). Supports 1-click view switching (`Tab` / `m`) between Fullscreen Tracks, Fullscreen Visualizer, and Dual-Column Split mode.
+- **Adaptive Visualizer & Transport Bar**: Real-time frequency bars (6 to 36 bars) and transport controls automatically scale to fit available terminal width and height without line-wrapping, overflow, or clipping.
 - **Live CAVA Spectrum Visualizer**: Integrated directly with `cava` (Console-based Audio Visualizer for PulseAudio/PipeWire), rendering real-time animated frequency bars with vibrant gradient colors (`bold magenta` peak -> `yellow` mid -> `bright blue` base) directly inside the TUI.
 - **Fast 40-Song Paginated Loading**: Loads any SoundCloud URL (track, set, playlist, or user profile) in fast 40-song chunks via `--playlist-items` and batch metadata enrichment (SoundCloud API v2), keeping startup under 2 seconds.
 - **40-Song In-Memory & Disk Stream Preloading**: Background worker pool pre-resolves direct audio streaming URLs for all 40 songs on the page. Transitions between tracks and autoplay take **zero delay**.
@@ -114,6 +115,7 @@ scloud-player --cli "https://soundcloud.com/artist/sets/album"
 |:---:|:---|
 | **`Space`** | Play / Pause current track |
 | **`Enter`** | Play selected track |
+| **`Tab`** or **`m`** | **Switch View Mode** (`Tracks` -> `Visualizer` -> `Split`) |
 | **`]`** or **`N`** | **Next Track** (skip to next track in queue) |
 | **`[`** or **`P`** | **Previous Track** (previous track or restart) |
 | **`Up` / `Down`** or **`k` / `j`** | Navigate tracklist rows |
@@ -133,6 +135,28 @@ scloud-player --cli "https://soundcloud.com/artist/sets/album"
 | **`q`** | Quit application |
 
 Mouse interaction is also supported: click any row in the track table to select and play it.
+
+---
+
+## Dynamic Resizing & View Modes
+
+`scloud-player` features an intelligent, multi-tier responsive layout system designed to look great on any terminal size, from full 4K monitors to 80x24 standard terminals, tmux/kitty split panes, and compact laptop windows:
+
+- **View Mode Switching (`Tab` or `m`)**:
+  - **`Tracks` View**: Expands the track library to 100% width, showing full titles, artists, duration, and stream caching indicators. Perfect for compact terminals or browsing large playlists.
+  - **`Visualizer` View**: Expands the Now Playing metadata card and live CAVA spectrum visualizer to 100% width with high-resolution multi-column bars.
+  - **`Split` View**: Dual-column Musikcube layout with side-by-side library and visualizer panels.
+  - **`Auto` Mode (Default)**: Automatically selects `Split` on screens $\ge 85$ columns and switches to `Tracks` on narrow screens ($< 85$ columns).
+- **Adaptive Breakpoints**:
+  - **Width Breakpoints**:
+    - $\ge 115$ columns: Full transport bar with 20-character seek bar, volume meter, and verbose badges.
+    - $85 - 114$ columns: Streamlined seek bar, volume percentage, and compact badges.
+    - $65 - 84$ columns (Standard 80-col terminals): 8-character seek bar, elapsed/total timer, and abbreviated status badges. Fits neatly on a single line with zero wrapping.
+    - $< 65$ columns: Ultra-compact transport display omitting the seek bar to prioritize track title and timer.
+  - **Height Breakpoints**:
+    - $\ge 26$ rows: Full view with keyboard shortcut cheatsheet.
+    - $18 - 25$ rows: Shortcuts cheatsheet hides automatically, giving full vertical space to the visualizer and track list.
+    - $< 18$ rows: Ultra-short mode hiding the visualizer and top bar, leaving maximum screen real estate for the track library.
 
 ---
 

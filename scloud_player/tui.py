@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
@@ -59,7 +60,8 @@ class UrlModal(ModalScreen[Optional[str]]):
 
     #url-dialog {
         padding: 1 2;
-        width: 80;
+        width: 90%;
+        max-width: 76;
         height: auto;
         border: thick $primary;
         background: $surface;
@@ -166,7 +168,9 @@ class CreditsModal(ModalScreen):
 
     #credits-dialog {
         padding: 1 2;
-        width: 82;
+        width: 92%;
+        max-width: 78;
+        max-height: 90%;
         height: auto;
         border: thick $primary;
         background: $surface;
@@ -195,9 +199,9 @@ class CreditsModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="credits-dialog"):
-            yield Label("[bold magenta]♫ SoundCloud Player — Credits & Acknowledgements ♫[/bold magenta]", id="credits-title")
-            t = Table.grid(padding=(0, 2))
-            t.add_column(width=16)
+            yield Label("[bold magenta]♫ SoundCloud Player — Credits ♫[/bold magenta]", id="credits-title")
+            t = Table.grid(padding=(0, 1))
+            t.add_column(width=13)
             t.add_column()
 
             t.add_row(Text("musikcube", style="bold cyan"), Text("Terminal audio UX, split layout & keyboard navigation inspiration (clangen)", style="white"))
@@ -227,29 +231,71 @@ class VisualizerWidget(Static):
         self.is_playing = False
         self.is_paused = False
 
-    def update_state(self, is_playing: bool, is_paused: bool, mode: str):
+    def update_state(self, is_playing: bool, is_paused: bool, mode: str, width: Optional[int] = None, height: Optional[int] = None):
         self.is_playing = is_playing
         self.is_paused = is_paused
         self.vis_mode = mode
-        self.refresh_bars()
+        self.refresh_bars(width=width, height=height)
 
-    def refresh_bars(self):
-        values = self.engine.get_bar_values(
+    def refresh_bars(self, width: Optional[int] = None, height: Optional[int] = None):
+        w = width if width is not None else self.size.width
+        h = height if height is not None else self.size.height
+
+        if w <= 0:
+            w = 40
+        if h <= 0:
+            h = 8
+
+        usable_w = max(8, w - 2)
+
+        if usable_w < 20:
+            bar_spacing = 0
+            num_bars = max(6, min(16, usable_w))
+        elif usable_w < 40:
+            bar_spacing = 1
+            num_bars = max(8, min(20, (usable_w + 1) // 2))
+        else:
+            bar_spacing = 1
+            num_bars = max(12, min(36, (usable_w + 1) // 2))
+
+        # Dynamic height calculation
+        grid_height = max(3, min(7, h - 2))
+
+        raw_values = self.engine.get_bar_values(
             is_playing=self.is_playing,
             is_paused=self.is_paused,
             mode=self.vis_mode
         )
-        # Render 7 rows of frequency bars
-        lines = self.engine.render_grid(values, height=6, bar_width=1, bar_spacing=1)
 
-        header = Text(" ▃▅▇ LIVE CAVA VISUALIZER ▇▅▃", style="bold cyan")
+        if len(raw_values) == num_bars:
+            values = raw_values
+        elif raw_values:
+            values = []
+            step = len(raw_values) / float(num_bars)
+            for i in range(num_bars):
+                idx = min(int(i * step), len(raw_values) - 1)
+                values.append(raw_values[idx])
+        else:
+            values = [0] * num_bars
+
+        lines = self.engine.render_grid(values, height=grid_height, bar_width=1, bar_spacing=bar_spacing)
+
+        if usable_w < 24:
+            header = Text(" ▃▅ CAVA ▅▃", style="bold cyan")
+        elif usable_w < 36:
+            header = Text(" ▃▅ LIVE CAVA ▅▃", style="bold cyan")
+        else:
+            header = Text(" ▃▅▇ LIVE CAVA VISUALIZER ▇▅▃", style="bold cyan")
+
         if self.vis_mode == "cava":
-            status = " [LIVE CAVA]" if self.engine.cava.is_active() else " [SPECTRUM]"
+            status = " [LIVE]" if usable_w < 36 else (" [LIVE CAVA]" if self.engine.cava.is_active() else " [SPECTRUM]")
         elif self.vis_mode == "off":
             status = " [OFF]"
         else:
             status = f" [{self.vis_mode.upper()}]"
-        header.append(status, style="dim yellow")
+
+        if usable_w >= 28:
+            header.append(status, style="dim yellow")
 
         full = Text()
         full.append_text(header)
@@ -264,11 +310,16 @@ class VisualizerWidget(Static):
 class NowPlayingCard(Static):
     """Widget showing detailed metadata for the active track."""
 
-    def update_track(self, track: Optional[dict], is_playing: bool, is_paused: bool):
+    def update_track(self, track: Optional[dict], is_playing: bool, is_paused: bool, width: Optional[int] = None):
+        w = width if width is not None else self.size.width
+        if w <= 0:
+            w = 32
+
         if not track:
+            msg = "No track playing" if w < 36 else "\nNo track playing.\nSelect a track to start playback.\n"
             self.update(Panel(
-                Text("\nNo track playing.\nSelect a track to start playback.\n", justify="center", style="dim white"),
-                title="[bold magenta]♫ NOW PLAYING ♫[/bold magenta]",
+                Text(msg, justify="center", style="dim white"),
+                title="[bold magenta]♫ NOW PLAYING ♫[/bold magenta]" if w >= 30 else "♫ PLAYING",
                 border_style="dim blue"
             ))
             return
@@ -279,24 +330,43 @@ class NowPlayingCard(Static):
         status_text = "⏸ PAUSED" if is_paused else ("▶ PLAYING" if is_playing else "⏹ STOPPED")
         status_style = "bold yellow" if is_paused else ("bold green" if is_playing else "dim")
 
-        t = Table.grid(padding=(0, 1))
-        t.add_column(width=10)
-        t.add_column()
+        inner_w = max(10, w - 4)
 
-        t.add_row(Text("Track:", style="bold cyan"), Text(title[:38], style="bold white"))
-        t.add_row(Text("Artist:", style="bold cyan"), Text(artist[:38], style="bold white"))
-        t.add_row(Text("Duration:", style="bold cyan"), Text(duration, style="bold white"))
-        t.add_row(Text("Status:", style="bold cyan"), Text(status_text, style=status_style))
+        if w < 36:
+            card_text = Text()
+            card_text.append("🎵 ", style="cyan")
+            card_text.append(f"{title[:max(8, inner_w - 4)]}\n", style="bold white")
+            card_text.append("👤 ", style="dim cyan")
+            card_text.append(f"{artist[:max(8, inner_w - 12)]} ", style="white")
+            card_text.append(f"• {duration}\n", style="dim cyan")
+            card_text.append("Status: ", style="dim")
+            card_text.append(status_text, style=status_style)
 
-        genre = track.get("genre")
-        if genre:
-            t.add_row(Text("Genre:", style="bold cyan"), Text(str(genre)[:38], style="bold white"))
+            self.update(Panel(
+                card_text,
+                title="[bold magenta]♫ NOW PLAYING[/bold magenta]" if w >= 24 else "♫ NOW",
+                border_style="bright_blue"
+            ))
+        else:
+            t = Table.grid(padding=(0, 1))
+            t.add_column(width=9)
+            t.add_column()
 
-        self.update(Panel(
-            t,
-            title="[bold magenta]♫ NOW PLAYING ♫[/bold magenta]",
-            border_style="bright_blue"
-        ))
+            val_w = max(12, inner_w - 11)
+            t.add_row(Text("Track:", style="bold cyan"), Text(title[:val_w], style="bold white"))
+            t.add_row(Text("Artist:", style="bold cyan"), Text(artist[:val_w], style="bold white"))
+            t.add_row(Text("Duration:", style="bold cyan"), Text(duration, style="bold white"))
+            t.add_row(Text("Status:", style="bold cyan"), Text(status_text, style=status_style))
+
+            genre = track.get("genre")
+            if genre and inner_w > 40:
+                t.add_row(Text("Genre:", style="bold cyan"), Text(str(genre)[:val_w], style="bold white"))
+
+            self.update(Panel(
+                t,
+                title="[bold magenta]♫ NOW PLAYING ♫[/bold magenta]",
+                border_style="bright_blue"
+            ))
 
 
 class TransportBar(Static):
@@ -315,45 +385,114 @@ class TransportBar(Static):
         shuffle: bool,
         repeat: str,
         cached_count: int,
-        total_in_page: int
+        total_in_page: int,
+        width: Optional[int] = None
     ):
+        w = width if width is not None else self.size.width
+        if w <= 0 and self.app:
+            w = self.app.size.width
+        if w <= 0:
+            w = 80
+
         elapsed_str = format_duration(time_pos)
         total_str = format_duration(duration)
-
-        # Build seek bar
-        bar_len = 24
-        if duration > 0:
-            pct = min(max(time_pos / duration, 0.0), 1.0)
-            filled = int(pct * bar_len)
-        else:
-            pct = 0.0
-            filled = 0
-
-        seek_line = "━" * filled + ("●" if filled < bar_len else "") + "─" * max(0, bar_len - filled - 1)
-
         icon = "⏸" if is_paused else ("▶" if is_playing else "⏹")
-        track_label = f"{title[:24]} - {artist[:18]}" if title else "Ready"
-
-        vol_len = 6
-        vol_filled = int((volume / 100.0) * vol_len)
-        vol_bar = "=" * vol_filled + "-" * (vol_len - vol_filled)
+        icon_style = "bold yellow" if is_paused else ("bold green" if is_playing else "dim")
 
         bar_text = Text()
-        bar_text.append(f" {icon} ", style="bold green" if is_playing and not is_paused else "bold yellow")
-        bar_text.append(f"{track_label:<44} ", style="bold white")
-        bar_text.append(f"{elapsed_str} ", style="bold cyan")
-        bar_text.append(f"[{seek_line}]", style="bright_magenta")
-        bar_text.append(f" {total_str}  ", style="bold cyan")
-        bar_text.append(f"Vol:{int(volume):>3}% [{vol_bar}]  ", style="bright_blue")
 
-        # Badges
-        bar_text.append("[AUTO]", style="bold green" if autoplay else "dim")
-        bar_text.append(" ")
-        bar_text.append("[SHUF]", style="bold green" if shuffle else "dim")
-        bar_text.append(" ")
-        bar_text.append(f"[REP:{repeat.upper()}]", style="bold green" if repeat != "off" else "dim")
-        bar_text.append(" ")
-        bar_text.append(f"[CACHE:{cached_count}/{total_in_page} ⚡]", style="bold green" if cached_count > 0 else "dim")
+        if w >= 115:
+            bar_len = 20
+            if duration > 0:
+                pct = min(max(time_pos / duration, 0.0), 1.0)
+                filled = int(pct * bar_len)
+            else:
+                pct = 0.0
+                filled = 0
+            seek_line = "━" * filled + ("●" if filled < bar_len else "") + "─" * max(0, bar_len - filled - 1)
+
+            track_label = f"{title[:26]} - {artist[:18]}" if title else "Ready"
+            vol_len = 5
+            vol_filled = int((volume / 100.0) * vol_len)
+            vol_bar = "=" * vol_filled + "-" * (vol_len - vol_filled)
+
+            bar_text.append(f" {icon} ", style=icon_style)
+            bar_text.append(f"{track_label:<46} ", style="bold white")
+            bar_text.append(f"{elapsed_str} ", style="bold cyan")
+            bar_text.append(f"[{seek_line}]", style="bright_magenta")
+            bar_text.append(f" {total_str}  ", style="bold cyan")
+            bar_text.append(f"Vol:{int(volume):>3}% [{vol_bar}]  ", style="bright_blue")
+            bar_text.append("[AUTO]", style="bold green" if autoplay else "dim")
+            bar_text.append(" ")
+            bar_text.append("[SHUF]", style="bold green" if shuffle else "dim")
+            bar_text.append(" ")
+            bar_text.append(f"[REP:{repeat.upper()}]", style="bold green" if repeat != "off" else "dim")
+            bar_text.append(" ")
+            bar_text.append(f"[CACHE:{cached_count}/{total_in_page} ⚡]", style="bold green" if cached_count > 0 else "dim")
+
+        elif w >= 85:
+            bar_len = 12
+            if duration > 0:
+                pct = min(max(time_pos / duration, 0.0), 1.0)
+                filled = int(pct * bar_len)
+            else:
+                pct = 0.0
+                filled = 0
+            seek_line = "━" * filled + ("●" if filled < bar_len else "") + "─" * max(0, bar_len - filled - 1)
+
+            track_label = f"{title[:20]} - {artist[:12]}" if title else "Ready"
+
+            bar_text.append(f" {icon} ", style=icon_style)
+            bar_text.append(f"{track_label:<34} ", style="bold white")
+            bar_text.append(f"{elapsed_str} ", style="bold cyan")
+            bar_text.append(f"[{seek_line}]", style="bright_magenta")
+            bar_text.append(f" {total_str} ", style="bold cyan")
+            bar_text.append(f"Vol:{int(volume)}% ", style="bright_blue")
+            bar_text.append("[A]", style="bold green" if autoplay else "dim")
+            bar_text.append(" ")
+            bar_text.append("[S]", style="bold green" if shuffle else "dim")
+            bar_text.append(" ")
+            rep_lbl = f"[R:{repeat[0].upper()}]" if repeat != "off" else "[R]"
+            bar_text.append(rep_lbl, style="bold green" if repeat != "off" else "dim")
+            bar_text.append(" ")
+            bar_text.append(f"[⚡{cached_count}/{total_in_page}]", style="bold green" if cached_count > 0 else "dim")
+
+        elif w >= 65:
+            bar_len = 8
+            if duration > 0:
+                pct = min(max(time_pos / duration, 0.0), 1.0)
+                filled = int(pct * bar_len)
+            else:
+                pct = 0.0
+                filled = 0
+            seek_line = "━" * filled + ("●" if filled < bar_len else "") + "─" * max(0, bar_len - filled - 1)
+
+            track_label = f"{title[:14]} - {artist[:8]}" if title else "Ready"
+
+            bar_text.append(f"{icon} ", style=icon_style)
+            bar_text.append(f"{track_label:<24} ", style="bold white")
+            bar_text.append(f"{elapsed_str}/{total_str} ", style="bold cyan")
+            bar_text.append(f"[{seek_line}] ", style="bright_magenta")
+            bar_text.append(f"V:{int(volume)}% ", style="bright_blue")
+            bar_text.append("[A]" if autoplay else "·", style="bold green" if autoplay else "dim")
+            bar_text.append("[S]" if shuffle else "·", style="bold green" if shuffle else "dim")
+            bar_text.append(f"[{repeat[0].upper()}]" if repeat != "off" else "·", style="bold green" if repeat != "off" else "dim")
+            bar_text.append(f"[⚡{cached_count}]", style="bold green" if cached_count > 0 else "dim")
+
+        else:
+            track_label = f"{title[:12]}" if title else "Ready"
+            bar_text.append(f"{icon} ", style=icon_style)
+            bar_text.append(f"{track_label} ", style="bold white")
+            bar_text.append(f"{elapsed_str}/{total_str} ", style="bold cyan")
+            bar_text.append(f"V:{int(volume)}% ", style="bright_blue")
+            if autoplay:
+                bar_text.append("A ", style="bold green")
+            if shuffle:
+                bar_text.append("S ", style="bold green")
+            if repeat != "off":
+                bar_text.append(f"R:{repeat[0].upper()} ", style="bold green")
+            if cached_count > 0:
+                bar_text.append(f"⚡{cached_count}", style="bold green")
 
         self.update(bar_text)
 
@@ -389,21 +528,21 @@ class ScloudPlayerApp(App):
     }
 
     #left-panel {
-        width: 65%;
+        width: 62%;
         height: 100%;
         border-right: solid #2c3549;
         padding: 0 1;
     }
 
     #right-panel {
-        width: 35%;
+        width: 38%;
         height: 100%;
         padding: 0 1;
     }
 
     #search-box {
         height: 3;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     #tracks-table {
@@ -420,6 +559,11 @@ class ScloudPlayerApp(App):
         padding: 0 1;
     }
 
+    #now-playing-card {
+        height: 7;
+        margin-top: 0;
+    }
+
     #visualizer-card {
         height: 9;
         border: solid #22293a;
@@ -427,31 +571,99 @@ class ScloudPlayerApp(App):
         background: #131722;
     }
 
-    #now-playing-card {
-        height: 7;
-        margin-top: 1;
-    }
-
     #info-card {
         height: 1fr;
+        min-height: 4;
         margin-top: 1;
         border: solid #22293a;
         background: #131722;
-        padding: 1;
+        padding: 0 1;
     }
 
     #transport-container {
         dock: bottom;
-        height: 2;
+        height: auto;
+        min-height: 1;
+        max-height: 2;
         background: #181d2a;
         border-top: solid #4facfe;
         padding: 0 1;
+    }
+
+    /* ==================== VIEW MODES ==================== */
+    .-view-tracks #left-panel {
+        width: 100%;
+        border-right: none;
+        display: block;
+    }
+    .-view-tracks #right-panel {
+        display: none;
+    }
+
+    .-view-visualizer #left-panel {
+        display: none;
+    }
+    .-view-visualizer #right-panel {
+        width: 100%;
+        display: block;
+    }
+
+    .-view-split #left-panel {
+        width: 60%;
+        border-right: solid #2c3549;
+        display: block;
+    }
+    .-view-split #right-panel {
+        width: 40%;
+        display: block;
+    }
+
+    /* ==================== RESPONSIVE BREAKPOINTS ==================== */
+
+    /* Narrow width (width < 85) */
+    .-narrow #left-panel {
+        padding: 0;
+    }
+    .-narrow #right-panel {
+        padding: 0;
+    }
+
+    /* Short height (height < 26) */
+    .-short #info-card {
+        display: none;
+    }
+    .-short #visualizer-card {
+        height: 6;
+        margin-top: 0;
+    }
+    .-short #now-playing-card {
+        height: 6;
+    }
+
+    /* Ultra-short height (height < 18) */
+    .-ultra-short #top-bar {
+        display: none;
+    }
+    .-ultra-short #info-card {
+        display: none;
+    }
+    .-ultra-short #visualizer-card {
+        display: none;
+    }
+    .-ultra-short #now-playing-card {
+        height: 5;
+        margin-top: 0;
+    }
+    .-ultra-short #search-box {
+        display: none;
     }
     """
 
     BINDINGS = [
         Binding("space", "toggle_play", "Play/Pause", priority=True),
         Binding("enter", "play_selected", "Play Selected"),
+        Binding("tab", "cycle_view", "Switch View", priority=True),
+        Binding("m", "cycle_view", "Switch View"),
         Binding("bracket_right", "next_track", "Next Track"),
         Binding("bracket_left", "prev_track", "Prev Track"),
         Binding("N", "next_track", "Next Track"),
@@ -504,7 +716,88 @@ class ScloudPlayerApp(App):
         self.shuffle = bool(self.config.get("shuffle", False))
         self.repeat_mode = str(self.config.get("repeat", "off"))
 
+        self.view_mode = "auto"
+        self._term_width = 100
+        self._term_height = 30
         self._tick_timer = None
+
+    @property
+    def effective_view_mode(self) -> str:
+        if self.view_mode == "auto":
+            return "tracks" if self._term_width < 85 else "split"
+        return self.view_mode
+
+    def _apply_view_layout(self, width: Optional[int] = None) -> None:
+        if width is not None:
+            self._term_width = width
+        mode = self.effective_view_mode
+
+        for c in ["-view-tracks", "-view-visualizer", "-view-split"]:
+            self.remove_class(c)
+            if self.screen:
+                self.screen.remove_class(c)
+
+        cls = f"-view-{mode}"
+        self.add_class(cls)
+        if self.screen:
+            self.screen.add_class(cls)
+
+        try:
+            base = self.screen_stack[0] if self.screen_stack else self.screen
+            if mode == "tracks":
+                table = base.query_one("#tracks-table", DataTable)
+                if not table.has_focus:
+                    table.focus()
+        except Exception:
+            pass
+
+    def _update_top_bar(self, width: Optional[int] = None) -> None:
+        w = width if width is not None else self._term_width
+        mode_str = self.effective_view_mode.capitalize()
+        if w < 60:
+            txt = f" ♫ SCloud | [Tab] {mode_str}"
+        elif w < 85:
+            txt = f" ♫ SoundCloud Player | [Tab] View: {mode_str} | [l] URL"
+        else:
+            txt = f" ♫ SoundCloud Player [Musikcube] | [Tab] View: {mode_str} | [l] Load URL | [?] Help"
+
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            top_bar = base.query_one("#top-bar", Static)
+            top_bar.update(Text(txt, style="bold cyan"))
+        except Exception:
+            pass
+
+    def action_cycle_view(self) -> None:
+        """Cycles between view modes: Tracks -> Visualizer -> Split."""
+        modes = ["tracks", "visualizer", "split"]
+        curr = self.effective_view_mode
+        idx = (modes.index(curr) + 1) % len(modes) if curr in modes else 0
+        self.view_mode = modes[idx]
+        self._apply_view_layout(self._term_width)
+        self._update_top_bar(self._term_width)
+        self.notify(f"View mode: {self.view_mode.upper()}", timeout=1.5)
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Dynamically handles terminal window resize."""
+        w = event.size.width
+        h = event.size.height
+        self._term_width = w
+        self._term_height = h
+
+        breakpoints = [
+            ("-narrow", w < 85),
+            ("-ultra-narrow", w < 65),
+            ("-short", h < 26),
+            ("-ultra-short", h < 18),
+        ]
+        for cls, active in breakpoints:
+            self.set_class(active, cls)
+            if self.screen:
+                self.screen.set_class(active, cls)
+
+        self._apply_view_layout(w)
+        self._update_top_bar(w)
 
     def compose(self) -> ComposeResult:
         with Container(id="app-container"):
@@ -531,6 +824,17 @@ class ScloudPlayerApp(App):
         table.cursor_type = "row"
         table.add_columns(" ", "#", "Title", "Artist", "Time", "⚡")
 
+        self._term_width = self.size.width if self.size.width > 0 else 100
+        self._term_height = self.size.height if self.size.height > 0 else 30
+
+        self.set_class(self._term_width < 85, "-narrow")
+        self.set_class(self._term_width < 65, "-ultra-narrow")
+        self.set_class(self._term_height < 26, "-short")
+        self.set_class(self._term_height < 18, "-ultra-short")
+
+        self._apply_view_layout(self._term_width)
+        self._update_top_bar(self._term_width)
+
         # Start periodic UI update tick (20 FPS for smooth progress and visualizer)
         self._tick_timer = self.set_interval(0.05, self._on_ui_tick)
 
@@ -545,6 +849,7 @@ class ScloudPlayerApp(App):
         shortcuts = [
             ("[Space]", "Play / Pause"),
             ("[Enter]", "Play Selected Track"),
+            ("[Tab] / [m]", "Switch View (Split/Tracks/Vis)"),
             ("[N] / []]", "Next Track"),
             ("[P] / [[]", "Previous Track"),
             ("[n] / [p]", "Next / Prev Page (40 Tracks)"),
@@ -566,7 +871,11 @@ class ScloudPlayerApp(App):
 
     async def _load_tracks_page_worker(self, url: str, page: int):
         """Asynchronously fetches a page of 40 tracks, updates table, and starts preloading."""
-        self.query_one("#pagination-bar", Static).update(f" Loading page {page} (max 40 tracks)...")
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            base.query_one("#pagination-bar", Static).update(f" Loading page {page} (max 40 tracks)...")
+        except Exception:
+            pass
 
         page_data = await asyncio.to_thread(
             fetch_track_page, url, page, self.page_size
@@ -581,16 +890,35 @@ class ScloudPlayerApp(App):
         self.filtered_tracks = list(self.track_page.tracks)
         self._populate_table()
 
-        # Kick off background pre-cache for the 30 songs
+        # Kick off background pre-cache for the 40 songs
         self.cache_manager.preload_tracks(self.filtered_tracks, priority_index=self.selected_track_index)
 
     def _populate_table(self):
         """Fills DataTable with current tracks."""
-        table = self.query_one("#tracks-table", DataTable)
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            table = base.query_one("#tracks-table", DataTable)
+        except Exception:
+            return
+
         table.clear()
 
         start_num = (self.current_page - 1) * self.page_size + 1
         active_track = self.player.get_state().current_track
+
+        table_w = table.size.width if table.size.width > 0 else self._term_width
+        if table_w < 45:
+            max_title = 16
+            max_artist = 8
+        elif table_w < 65:
+            max_title = 24
+            max_artist = 14
+        elif table_w < 90:
+            max_title = 38
+            max_artist = 20
+        else:
+            max_title = 50
+            max_artist = 28
 
         for idx, track in enumerate(self.filtered_tracks):
             is_active = (
@@ -609,8 +937,8 @@ class ScloudPlayerApp(App):
             table.add_row(
                 status_icon,
                 str(start_num + idx),
-                title[:45],
-                artist[:25],
+                title[:max_title],
+                artist[:max_artist],
                 dur,
                 has_cache,
                 key=str(idx)
@@ -618,9 +946,18 @@ class ScloudPlayerApp(App):
 
         total_txt = f" of {self.track_page.total_tracks}" if self.track_page and self.track_page.total_tracks else ""
         source_title = self.track_page.playlist_title if self.track_page and self.track_page.playlist_title else self.current_url
-        self.query_one("#pagination-bar", Static).update(
-            Text(f" Page {self.current_page}{total_txt} ({len(self.filtered_tracks)} tracks) | [p] Prev Page | [n] Next Page | Source: {source_title[:35]}")
-        )
+
+        try:
+            pagination = base.query_one("#pagination-bar", Static)
+            if self._term_width < 70:
+                p_text = f" P.{self.current_page}{total_txt} ({len(self.filtered_tracks)}) | [p]/[n]"
+            elif self._term_width < 95:
+                p_text = f" Page {self.current_page}{total_txt} ({len(self.filtered_tracks)} tracks) | [p] Prev | [n] Next"
+            else:
+                p_text = f" Page {self.current_page}{total_txt} ({len(self.filtered_tracks)} tracks) | [p] Prev Page | [n] Next Page | Source: {source_title[:28]}"
+            pagination.update(Text(p_text))
+        except Exception:
+            pass
 
     def _on_track_cached_bg(self, key: str, stream_url: str):
         """Called when a stream URL has been pre-cached in background."""
@@ -628,43 +965,57 @@ class ScloudPlayerApp(App):
 
     def _refresh_table_cache_icons(self):
         """Updates table cache icons when background preload resolves URLs."""
-        table = self.query_one("#tracks-table", DataTable)
-        for idx, track in enumerate(self.filtered_tracks):
-            if self.cache_manager.has_stream_url(track):
-                try:
-                    table.update_cell_at((idx, 5), "⚡")
-                except Exception:
-                    pass
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            table = base.query_one("#tracks-table", DataTable)
+            for idx, track in enumerate(self.filtered_tracks):
+                if self.cache_manager.has_stream_url(track):
+                    try:
+                        table.update_cell_at((idx, 5), "⚡")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def _on_ui_tick(self):
         """Periodic UI refresh callback for live visualizer and transport bar."""
         state = self.player.get_state()
+        base = self.screen_stack[0] if self.screen_stack else self.screen
 
         # Update Visualizer
-        vis_widget = self.query_one("#visualizer-card", VisualizerWidget)
-        vis_widget.update_state(state.is_playing, state.is_paused, self.vis_mode)
+        try:
+            vis_widget = base.query_one("#visualizer-card", VisualizerWidget)
+            vis_widget.update_state(state.is_playing, state.is_paused, self.vis_mode)
+        except Exception:
+            pass
 
         # Update Now Playing Card
-        np_card = self.query_one("#now-playing-card", NowPlayingCard)
-        np_card.update_track(state.current_track, state.is_playing, state.is_paused)
+        try:
+            np_card = base.query_one("#now-playing-card", NowPlayingCard)
+            np_card.update_track(state.current_track, state.is_playing, state.is_paused)
+        except Exception:
+            pass
 
         # Update Transport Bar
-        curr = state.current_track or {}
-        cached_count = self.cache_manager.cached_count(self.filtered_tracks)
-        self.query_one("#transport-bar", TransportBar).update_transport(
-            title=curr.get("title", ""),
-            artist=curr.get("uploader", ""),
-            time_pos=state.current_time_pos,
-            duration=state.duration,
-            volume=state.volume,
-            is_playing=state.is_playing,
-            is_paused=state.is_paused,
-            autoplay=self.autoplay,
-            shuffle=self.shuffle,
-            repeat=self.repeat_mode,
-            cached_count=cached_count,
-            total_in_page=len(self.filtered_tracks)
-        )
+        try:
+            curr = state.current_track or {}
+            cached_count = self.cache_manager.cached_count(self.filtered_tracks)
+            base.query_one("#transport-bar", TransportBar).update_transport(
+                title=curr.get("title", ""),
+                artist=curr.get("uploader", ""),
+                time_pos=state.current_time_pos,
+                duration=state.duration,
+                volume=state.volume,
+                is_playing=state.is_playing,
+                is_paused=state.is_paused,
+                autoplay=self.autoplay,
+                shuffle=self.shuffle,
+                repeat=self.repeat_mode,
+                cached_count=cached_count,
+                total_in_page=len(self.filtered_tracks)
+            )
+        except Exception:
+            pass
 
     def _on_mpv_track_end(self):
         """Callback when MPV finishes a track naturally."""
@@ -702,8 +1053,9 @@ class ScloudPlayerApp(App):
         self.selected_track_index = index
 
         # Highlight in table
-        table = self.query_one("#tracks-table", DataTable)
+        base = self.screen_stack[0] if self.screen_stack else self.screen
         try:
+            table = base.query_one("#tracks-table", DataTable)
             table.move_cursor(row=index)
         except Exception:
             pass
@@ -731,10 +1083,14 @@ class ScloudPlayerApp(App):
             self.player.toggle_pause()
 
     def action_play_selected(self) -> None:
-        table = self.query_one("#tracks-table", DataTable)
-        if table.cursor_row is not None and table.cursor_row < len(self.filtered_tracks):
-            self.selected_track_index = table.cursor_row
-            self._play_track_at_index(self.selected_track_index)
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            table = base.query_one("#tracks-table", DataTable)
+            if table.cursor_row is not None and table.cursor_row < len(self.filtered_tracks):
+                self.selected_track_index = table.cursor_row
+                self._play_track_at_index(self.selected_track_index)
+        except Exception:
+            pass
 
     def action_next_track(self) -> None:
         """Skips immediately to the next track."""
@@ -849,15 +1205,26 @@ class ScloudPlayerApp(App):
         self.push_screen(UrlModal(), handle_url_result)
 
     def action_focus_filter(self) -> None:
-        self.query_one("#search-box", Input).focus()
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            if self.effective_view_mode == "visualizer":
+                self.view_mode = "tracks"
+                self._apply_view_layout()
+            base.query_one("#search-box", Input).focus()
+        except Exception:
+            pass
 
     def action_clear_filter(self) -> None:
-        search_box = self.query_one("#search-box", Input)
-        search_box.value = ""
-        if self.track_page:
-            self.filtered_tracks = list(self.track_page.tracks)
-            self._populate_table()
-        self.query_one("#tracks-table", DataTable).focus()
+        base = self.screen_stack[0] if self.screen_stack else self.screen
+        try:
+            search_box = base.query_one("#search-box", Input)
+            search_box.value = ""
+            if self.track_page:
+                self.filtered_tracks = list(self.track_page.tracks)
+                self._populate_table()
+            base.query_one("#tracks-table", DataTable).focus()
+        except Exception:
+            pass
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "search-box" and self.track_page:
