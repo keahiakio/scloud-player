@@ -147,6 +147,7 @@ def enrich_tracks_metadata(tracks_slice: List[dict]) -> List[dict]:
                         target["duration"] = duration
                     if permalink_url:
                         target["webpage_url"] = permalink_url
+                        target["permalink_url"] = permalink_url
     except Exception:
         # Fail gracefully so table rendering still works even if enrichment fails
         pass

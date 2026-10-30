@@ -24,7 +24,7 @@ from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -157,35 +157,124 @@ class UrlModal(ModalScreen[Optional[str]]):
         self.dismiss(val if val else None)
 
 
-class CreditsModal(ModalScreen):
-    """Modal dialog displaying credits and acknowledgements for open source projects."""
+def copy_text_to_clipboard(text: str) -> bool:
+    """Copies text to the system clipboard across Linux (Wayland/X11), macOS, and Windows."""
+    copied = False
+
+    # Wayland wl-copy
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        try:
+            res = subprocess.run(
+                ["wl-copy"],
+                input=text.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                copied = True
+        except Exception:
+            pass
+
+    # X11 xclip
+    if not copied and os.environ.get("DISPLAY") and shutil.which("xclip"):
+        try:
+            res = subprocess.run(
+                ["xclip", "-selection", "clipboard"],
+                input=text.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                copied = True
+        except Exception:
+            pass
+
+    # X11 xsel
+    if not copied and os.environ.get("DISPLAY") and shutil.which("xsel"):
+        try:
+            res = subprocess.run(
+                ["xsel", "--clipboard", "--input"],
+                input=text.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                copied = True
+        except Exception:
+            pass
+
+    # macOS pbcopy
+    if not copied and shutil.which("pbcopy"):
+        try:
+            res = subprocess.run(
+                ["pbcopy"],
+                input=text.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                copied = True
+        except Exception:
+            pass
+
+    # Windows clip.exe
+    if not copied and shutil.which("clip.exe"):
+        try:
+            res = subprocess.run(
+                ["clip.exe"],
+                input=text.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                copied = True
+        except Exception:
+            pass
+
+    return copied
+
+
+class HelpModal(ModalScreen):
+    """Modal dialog displaying comprehensive help, keyboard shortcuts, tips, and open source credits."""
 
     DEFAULT_CSS = """
-    CreditsModal {
+    HelpModal, CreditsModal {
         align: center middle;
         background: rgba(0, 0, 0, 0.75);
     }
 
-    #credits-dialog {
+    #help-dialog, #credits-dialog {
         padding: 1 2;
-        width: 92%;
-        max-width: 78;
-        max-height: 90%;
+        width: 94%;
+        max-width: 82;
+        max-height: 88%;
         height: auto;
         border: thick $primary;
         background: $surface;
     }
 
-    #credits-title {
+    #help-title, #credits-title {
         text-align: center;
         margin-bottom: 1;
     }
 
-    #credits-body {
+    #help-scroll {
+        height: auto;
+        max-height: 20;
         margin-bottom: 1;
     }
 
-    #credits-buttons {
+    #help-buttons, #credits-buttons {
         align: right middle;
     }
     """
@@ -195,30 +284,87 @@ class CreditsModal(ModalScreen):
         Binding("enter", "dismiss", "Close", priority=True),
         Binding("space", "dismiss", "Close", priority=True),
         Binding("q", "dismiss", "Close", priority=True),
+        Binding("question_mark", "dismiss", "Close", priority=True),
+        Binding("f1", "dismiss", "Close", priority=True),
     ]
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="credits-dialog"):
-            yield Label("[bold magenta]♫ SoundCloud Player — Credits ♫[/bold magenta]", id="credits-title")
-            t = Table.grid(padding=(0, 1))
-            t.add_column(width=13)
-            t.add_column()
+        with Vertical(id="help-dialog"):
+            yield Label("[bold magenta]♫ SoundCloud Player — Help & Shortcuts ♫[/bold magenta]", id="help-title")
+            with VerticalScroll(id="help-scroll"):
+                # Table of keyboard shortcuts
+                kb_table = Table.grid(padding=(0, 2))
+                kb_table.add_column(width=16)
+                kb_table.add_column()
 
-            t.add_row(Text("musikcube", style="bold cyan"), Text("Terminal audio UX, split layout & keyboard navigation inspiration (clangen)", style="white"))
-            t.add_row(Text("CAVA", style="bold cyan"), Text("Audio spectrum visualizer backend for PulseAudio / PipeWire (Karl Stavestrand)", style="white"))
-            t.add_row(Text("mpv", style="bold cyan"), Text("High-performance audio engine & JSON IPC daemon (mpv project)", style="white"))
-            t.add_row(Text("Textual", style="bold cyan"), Text("Reactive terminal user interface framework (Will McGugan & Textualize)", style="white"))
-            t.add_row(Text("Rich", style="bold cyan"), Text("Terminal styling, tables & renderables (Textualize)", style="white"))
-            t.add_row(Text("yt-dlp", style="bold cyan"), Text("SoundCloud stream URL & metadata extractor (yt-dlp team)", style="white"))
-            t.add_row(Text("FFmpeg", style="bold cyan"), Text("Multimedia audio decoding toolkit (FFmpeg team)", style="white"))
-            t.add_row(Text("requests", style="bold cyan"), Text("HTTP library for SoundCloud API v2 batch enrichment (PSF)", style="white"))
+                shortcuts = [
+                    ("[Space]", "Play / Pause playback"),
+                    ("[Enter]", "Play selected track from queue"),
+                    ("[Tab] / [m]", "Switch View (Split -> Tracks -> Visualizer)"),
+                    ("[ ] ] / [N]", "Next track in queue"),
+                    ("[ [ ] / [P]", "Previous track / restart"),
+                    ("[<] / [>]", "Seek -5s / +5s (or Left / Right arrows, comma / period)"),
+                    ("[-] / [+]", "Volume Down / Up (5% increments)"),
+                    ("[Up] / [Down]", "Move tracklist cursor (or [k] / [j])"),
+                    ("[y]", "Copy active track link to clipboard (for SoundCloud account)"),
+                    ("[n] / [p]", "Next / Previous page (40 tracks per batch)"),
+                    ("[a]", "Toggle Autoplay mode"),
+                    ("[s]", "Toggle Shuffle mode"),
+                    ("[r]", "Cycle Repeat mode (Off -> One -> All)"),
+                    ("[v]", "Cycle Visualizer mode (CAVA -> Spectrum -> Off)"),
+                    ("[c]", "Launch external CAVA terminal window"),
+                    ("[l] / [u]", "Load SoundCloud URL (playlist, user, track)"),
+                    ("[/]", "Focus search / filter box"),
+                    ("[Esc]", "Clear search filter / return to tracklist"),
+                    ("[?] / [F1]", "Show this Help & Credits modal"),
+                    ("[q]", "Quit SoundCloud Player"),
+                ]
+                for key, desc in shortcuts:
+                    kb_table.add_row(Text(key, style="bold cyan"), Text(desc, style="white"))
 
-            yield Static(Panel(t, title="[bold yellow]Open Source Credits[/bold yellow]", border_style="dim cyan"), id="credits-body")
-            with Horizontal(id="credits-buttons"):
-                yield Button("Close (Esc)", variant="primary", id="btn-close-credits")
+                yield Static(Panel(kb_table, title="[bold yellow]⚡ Keyboard Shortcuts[/bold yellow]", border_style="dim cyan"))
+
+                # Features & Tips
+                tips_table = Table.grid(padding=(0, 2))
+                tips_table.add_column(width=16)
+                tips_table.add_column()
+                tips_table.add_row(
+                    Text("Copy Song Link", style="bold green"),
+                    Text("Press [y] anytime while playing to copy the song's web link to your clipboard so you can open it in your browser and like or repost on your SoundCloud account.", style="white")
+                )
+                tips_table.add_row(
+                    Text("Preload Queue", style="bold green"),
+                    Text("Upcoming tracks are pre-resolved in the background. Tracks with ⚡ badge stream instantly.", style="white")
+                )
+                tips_table.add_row(
+                    Text("Responsive Views", style="bold green"),
+                    Text("Press Tab or 'm' to cycle views. On screens ≥ 85 cols, the sidebar remains visible in Tracks view.", style="white")
+                )
+                yield Static(Panel(tips_table, title="[bold yellow]💡 Tips & Features[/bold yellow]", border_style="dim green"))
+
+                # Open Source Credits
+                credits_table = Table.grid(padding=(0, 1))
+                credits_table.add_column(width=13)
+                credits_table.add_column()
+                credits_table.add_row(Text("musikcube", style="bold cyan"), Text("Terminal audio UX, split layout & keyboard navigation inspiration (clangen)", style="white"))
+                credits_table.add_row(Text("CAVA", style="bold cyan"), Text("Audio spectrum visualizer backend for PulseAudio / PipeWire (Karl Stavestrand)", style="white"))
+                credits_table.add_row(Text("mpv", style="bold cyan"), Text("High-performance audio engine & JSON IPC daemon (mpv project)", style="white"))
+                credits_table.add_row(Text("Textual", style="bold cyan"), Text("Reactive terminal user interface framework (Will McGugan & Textualize)", style="white"))
+                credits_table.add_row(Text("Rich", style="bold cyan"), Text("Terminal styling, tables & renderables (Textualize)", style="white"))
+                credits_table.add_row(Text("yt-dlp", style="bold cyan"), Text("SoundCloud stream URL & metadata extractor (yt-dlp team)", style="white"))
+                credits_table.add_row(Text("FFmpeg", style="bold cyan"), Text("Multimedia audio decoding toolkit (FFmpeg team)", style="white"))
+                credits_table.add_row(Text("requests", style="bold cyan"), Text("HTTP library for SoundCloud API v2 batch enrichment (PSF)", style="white"))
+
+                yield Static(Panel(credits_table, title="[bold yellow]Open Source Credits & Acknowledgements[/bold yellow]", border_style="dim cyan"))
+
+            with Horizontal(id="help-buttons"):
+                yield Button("Close (Esc)", variant="primary", id="btn-close-help")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss()
+
+
+CreditsModal = HelpModal
 
 
 class VisualizerWidget(Static):
@@ -342,9 +488,11 @@ class NowPlayingCard(Static):
             card_text.append("Status: ", style="dim")
             card_text.append(status_text, style=status_style)
 
+            subtitle = "[dim green][y] Copy[/dim green]" if (is_playing or is_paused) and w >= 24 else None
             self.update(Panel(
                 card_text,
                 title="[bold magenta]♫ NOW PLAYING[/bold magenta]" if w >= 24 else "♫ NOW",
+                subtitle=subtitle,
                 border_style="bright_blue"
             ))
         else:
@@ -362,9 +510,11 @@ class NowPlayingCard(Static):
             if genre and inner_w > 40:
                 t.add_row(Text("Genre:", style="bold cyan"), Text(str(genre)[:val_w], style="bold white"))
 
+            subtitle = "[dim green][y] Copy Link[/dim green]" if (is_playing or is_paused) else None
             self.update(Panel(
                 t,
                 title="[bold magenta]♫ NOW PLAYING ♫[/bold magenta]",
+                subtitle=subtitle,
                 border_style="bright_blue"
             ))
 
@@ -697,17 +847,31 @@ class ScloudPlayerApp(App):
         Binding("enter", "play_selected", "Play Selected"),
         Binding("tab", "cycle_view", "Switch View", priority=True),
         Binding("m", "cycle_view", "Switch View"),
-        Binding("bracket_right", "next_track", "Next Track"),
-        Binding("bracket_left", "prev_track", "Prev Track"),
+        Binding("]", "next_track", "Next Track"),
+        Binding("[", "prev_track", "Prev Track"),
+        Binding("right_square_bracket", "next_track", "Next Track", show=False),
+        Binding("left_square_bracket", "prev_track", "Prev Track", show=False),
+        Binding("bracket_right", "next_track", "Next Track", show=False),
+        Binding("bracket_left", "prev_track", "Prev Track", show=False),
         Binding("N", "next_track", "Next Track"),
         Binding("P", "prev_track", "Prev Track"),
         Binding("n", "next_page", "Next Page"),
         Binding("p", "prev_page", "Prev Page"),
+        Binding(">", "seek_forward", "Seek +5s"),
+        Binding("<", "seek_backward", "Seek -5s"),
+        Binding("greater_than_sign", "seek_forward", "Seek +5s", show=False),
+        Binding("less_than_sign", "seek_backward", "Seek -5s", show=False),
+        Binding("full_stop", "seek_forward", "Seek +5s", show=False),
+        Binding("comma", "seek_backward", "Seek -5s", show=False),
         Binding("right", "seek_forward", "Seek +5s"),
         Binding("left", "seek_backward", "Seek -5s"),
+        Binding("k", "cursor_up", "Cursor Up", show=False),
+        Binding("j", "cursor_down", "Cursor Down", show=False),
         Binding("plus", "volume_up", "Vol +5%"),
         Binding("equals", "volume_up", "Vol +5%"),
         Binding("minus", "volume_down", "Vol -5%"),
+        Binding("y", "copy_track_link", "Copy Link"),
+        Binding("Y", "copy_track_link", "Copy Link", show=False),
         Binding("a", "toggle_autoplay", "Autoplay"),
         Binding("s", "toggle_shuffle", "Shuffle"),
         Binding("r", "cycle_repeat", "Repeat"),
@@ -717,8 +881,8 @@ class ScloudPlayerApp(App):
         Binding("u", "load_url", "Load URL"),
         Binding("slash", "focus_filter", "Search/Filter"),
         Binding("escape", "clear_filter", "Clear Filter"),
-        Binding("question_mark", "show_credits", "Credits & Help"),
-        Binding("f1", "show_credits", "Credits & Help"),
+        Binding("question_mark", "show_help", "Help & Credits"),
+        Binding("f1", "show_help", "Help & Credits"),
         Binding("ctrl+c", "quit_app", "Quit", priority=True),
         Binding("ctrl+q", "quit_app", "Quit", priority=True),
         Binding("q", "quit_app", "Quit"),
@@ -909,18 +1073,19 @@ class ScloudPlayerApp(App):
             ("[Space]", "Play / Pause"),
             ("[Enter]", "Play Selected Track"),
             ("[Tab] / [m]", "Switch View (Split/Tracks/Vis)"),
-            ("[N] / []]", "Next Track"),
-            ("[P] / [[]", "Previous Track"),
-            ("[n] / [p]", "Next / Prev Page (40 Tracks)"),
+            ("[ ] ] / [N]", "Next Track"),
+            ("[ [ ] / [P]", "Previous Track"),
             ("[<] / [>]", "Seek -5s / +5s"),
             ("[-] / [+]", "Volume Down / Up"),
+            ("[y]", "Copy Song Link"),
+            ("[n] / [p]", "Next / Prev Page (40 Tracks)"),
             ("[a]", "Toggle Autoplay"),
             ("[s]", "Toggle Shuffle"),
             ("[r]", "Cycle Repeat (Off/One/All)"),
             ("[v]", "Cycle Visualizer Mode"),
             ("[l]", "Load SoundCloud URL"),
             ("[/]", "Quick Search Filter"),
-            ("[?]", "Credits & Help"),
+            ("[?]", "Help & Credits"),
             ("[q]", "Quit Player"),
         ]
         for key, desc in shortcuts:
@@ -1257,6 +1422,65 @@ class ScloudPlayerApp(App):
     def action_seek_backward(self) -> None:
         self.player.seek(-5.0)
 
+    def action_cursor_up(self) -> None:
+        try:
+            base = self.screen_stack[0] if self.screen_stack else self.screen
+            table = base.query_one("#tracks-table", DataTable)
+            table.action_cursor_up()
+        except Exception:
+            pass
+
+    def action_cursor_down(self) -> None:
+        try:
+            base = self.screen_stack[0] if self.screen_stack else self.screen
+            table = base.query_one("#tracks-table", DataTable)
+            table.action_cursor_down()
+        except Exception:
+            pass
+
+    def action_copy_track_link(self) -> None:
+        """Copies the SoundCloud URL of the active (or selected) track to the clipboard."""
+        state = self.player.get_state()
+        track = state.current_track
+        if not track and self.filtered_tracks and 0 <= self.selected_track_index < len(self.filtered_tracks):
+            track = self.filtered_tracks[self.selected_track_index]
+
+        if not track:
+            self.notify("No track is currently playing or selected.", severity="warning", timeout=3.0)
+            return
+
+        link = self._get_track_link(track)
+        if not link:
+            self.notify(f"Could not find URL for '{track.get('title', 'track')}'.", severity="warning", timeout=3.0)
+            return
+
+        # 1. Textual OSC 52 terminal clipboard
+        try:
+            self.copy_to_clipboard(link)
+        except Exception:
+            pass
+
+        # 2. Native OS clipboard tool
+        copy_text_to_clipboard(link)
+
+        title = track.get("title") or "Track"
+        self.notify(f"Copied link for '{title}':\n{link}", title="Link Copied", timeout=4.0)
+
+    def _get_track_link(self, track: dict) -> Optional[str]:
+        """Extracts the best web permalink for a SoundCloud track."""
+        for key in ("permalink_url", "webpage_url", "url"):
+            val = track.get(key)
+            if isinstance(val, str) and "soundcloud.com" in val:
+                return val
+        for key in ("permalink_url", "webpage_url", "url"):
+            val = track.get(key)
+            if isinstance(val, str) and val.startswith(("http://", "https://")):
+                return val
+        track_id = track.get("id")
+        if track_id:
+            return f"https://api.soundcloud.com/tracks/{track_id}"
+        return None
+
     def action_volume_up(self) -> None:
         self.player.add_volume(5.0)
         self.config["volume"] = int(self.player.get_state().volume)
@@ -1375,9 +1599,13 @@ class ScloudPlayerApp(App):
         except Exception:
             pass
 
+    def action_show_help(self) -> None:
+        """Opens modal displaying keyboard shortcuts, help guide, and open source credits."""
+        self.push_screen(HelpModal())
+
     def action_show_credits(self) -> None:
-        """Opens modal displaying open source credits and acknowledgements."""
-        self.push_screen(CreditsModal())
+        """Alias for action_show_help."""
+        self.action_show_help()
 
     def action_quit_app(self) -> None:
         if self._tick_timer:

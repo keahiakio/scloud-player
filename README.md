@@ -119,11 +119,12 @@ scloud-player --cli "https://soundcloud.com/artist/sets/album"
 | **`]`** or **`N`** | **Next Track** (skip to next track in queue) |
 | **`[`** or **`P`** | **Previous Track** (previous track or restart) |
 | **`Up` / `Down`** or **`k` / `j`** | Navigate tracklist rows |
+| **`>`** or **`Right`** (or **`.`**) | Seek forward 5 seconds |
+| **`<`** or **`Left`** (or **`,`**) | Seek backward 5 seconds |
+| **`+`** / **`-`** | Volume Up / Volume Down (5% increments) |
+| **`y`** | **Copy Song Link** to clipboard (open in browser to like/save on your SoundCloud account) |
 | **`n`** | Next Page (Loads next 40 tracks) |
 | **`p`** | Previous Page (Loads previous 40 tracks) |
-| **`>`** or **`Right`** | Seek forward 5 seconds |
-| **`<`** or **`Left`** | Seek backward 5 seconds |
-| **`+`** / **`-`** | Volume Up / Volume Down (5% increments) |
 | **`a`** | Toggle Autoplay mode |
 | **`s`** | Toggle Shuffle mode |
 | **`r`** | Cycle Repeat mode (`Off` -> `One` -> `All`) |
@@ -132,6 +133,7 @@ scloud-player --cli "https://soundcloud.com/artist/sets/album"
 | **`l`** or **`u`** | Open interactive **Load URL** modal dialog |
 | **`/`** | Focus search bar to filter tracks on current page |
 | **`Esc`** | Clear filter and return focus to tracklist |
+| **`?`** or **`F1`** | **Help & Credits** modal dialog |
 | **`q`** | Quit application |
 
 Mouse interaction is also supported: click any row in the track table to select and play it.

@@ -295,3 +295,191 @@ def test_tui_empty_tracks_placeholder():
                 assert "No tracks found" in str(table.get_row_at(0))
 
     asyncio.run(_async_run())
+
+
+def test_tui_shortcuts_brackets_and_seeking():
+    async def _async_run():
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[
+                    {"id": "1", "title": "Track 1", "uploader": "Artist 1", "duration": 150, "webpage_url": "https://soundcloud.com/artist/track1"},
+                    {"id": "2", "title": "Track 2", "uploader": "Artist 2", "duration": 200, "webpage_url": "https://soundcloud.com/artist/track2"},
+                    {"id": "3", "title": "Track 3", "uploader": "Artist 3", "duration": 250, "webpage_url": "https://soundcloud.com/artist/track3"},
+                ],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="Test",
+                total_tracks=3
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                assert app.selected_track_index == 0
+
+                # Test next/prev track via bracket keys
+                with patch.object(app, "_play_track_at_index") as mock_play:
+                    await pilot.press("]")
+                    mock_play.assert_called_with(1)
+                    await pilot.press("[")
+                    mock_play.assert_called_with(0)
+
+                # Test seek forward/backward via < and >
+                with patch.object(app.player, "seek") as mock_seek:
+                    await pilot.press(">")
+                    mock_seek.assert_called_with(5.0)
+                    await pilot.press("<")
+                    mock_seek.assert_called_with(-5.0)
+                    await pilot.press(".")
+                    mock_seek.assert_called_with(5.0)
+                    await pilot.press(",")
+                    mock_seek.assert_called_with(-5.0)
+
+    asyncio.run(_async_run())
+
+
+def test_tui_help_modal_and_shortcuts():
+    async def _async_run():
+        from scloud_player.tui import HelpModal, CreditsModal
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[{"id": "1", "title": "Track 1", "uploader": "Artist", "duration": 150}],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="Test",
+                total_tracks=1
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                # Open Help with '?'
+                await pilot.press("?")
+                await pilot.pause()
+                assert len(app.screen_stack) == 2
+                modal = app.screen
+                assert isinstance(modal, HelpModal)
+                assert isinstance(modal, CreditsModal)
+
+                # Verify help modal contains shortcuts, tips, and credits panels
+                scroll = modal.query_one("#help-scroll")
+                panel_titles = [str(c.render()._renderable.title) for c in scroll.children]
+                assert any("Keyboard Shortcuts" in t or "Shortcuts" in t for t in panel_titles)
+                assert any("Tips" in t or "Features" in t for t in panel_titles)
+                assert any("Credits" in t for t in panel_titles)
+
+                # Dismiss with escape
+                await pilot.press("escape")
+                await pilot.pause()
+                assert len(app.screen_stack) == 1
+
+                # Open Help with F1
+                await pilot.press("f1")
+                await pilot.pause()
+                assert len(app.screen_stack) == 2
+                # Dismiss with '?'
+                await pilot.press("?")
+                await pilot.pause()
+                assert len(app.screen_stack) == 1
+
+    asyncio.run(_async_run())
+
+
+def test_tui_copy_track_link():
+    async def _async_run():
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.copy_text_to_clipboard") as mock_os_copy, \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[
+                    {"id": "100", "title": "Cool Song", "uploader": "Artist", "duration": 180, "webpage_url": "https://soundcloud.com/artist/cool-song"},
+                ],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="Test",
+                total_tracks=1
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                # Case 1: Track playing in player state
+                app.player._state.current_track = {
+                    "id": "100",
+                    "title": "Cool Song",
+                    "uploader": "Artist",
+                    "webpage_url": "https://soundcloud.com/artist/cool-song"
+                }
+
+                with patch.object(app, "copy_to_clipboard") as mock_textual_copy, \
+                     patch.object(app, "notify") as mock_notify:
+                    await pilot.press("y")
+                    mock_textual_copy.assert_called_with("https://soundcloud.com/artist/cool-song")
+                    mock_os_copy.assert_called_with("https://soundcloud.com/artist/cool-song")
+                    assert mock_notify.called
+                    assert "Copied link" in mock_notify.call_args[0][0]
+
+                # Case 2: No track currently playing, but selected track exists
+                app.player._state.current_track = None
+                app.selected_track_index = 0
+                with patch.object(app, "copy_to_clipboard") as mock_textual_copy, \
+                     patch.object(app, "notify") as mock_notify:
+                    await pilot.press("y")
+                    mock_textual_copy.assert_called_with("https://soundcloud.com/artist/cool-song")
+                    assert mock_notify.called
+
+    asyncio.run(_async_run())
+
+
+def test_tui_vim_navigation():
+    async def _async_run():
+        with patch("scloud_player.player.subprocess.Popen"), \
+             patch("scloud_player.visualizer.subprocess.Popen"), \
+             patch("scloud_player.tui.load_config", return_value={"volume": 80, "visualizer": "cava"}), \
+             patch("scloud_player.tui.fetch_track_page") as mock_fetch:
+
+            mock_fetch.return_value = MagicMock(
+                tracks=[
+                    {"id": "1", "title": "Track 1", "uploader": "Artist 1", "duration": 150},
+                    {"id": "2", "title": "Track 2", "uploader": "Artist 2", "duration": 200},
+                    {"id": "3", "title": "Track 3", "uploader": "Artist 3", "duration": 250},
+                ],
+                page=1,
+                page_size=40,
+                has_next=False,
+                playlist_title="Test",
+                total_tracks=3
+            )
+            app = ScloudPlayerApp(initial_url="https://soundcloud.com/test")
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                from textual.widgets import DataTable
+                table = app.query_one("#tracks-table", DataTable)
+                assert table.cursor_row == 0
+
+                await pilot.press("j")
+                assert table.cursor_row == 1
+
+                await pilot.press("j")
+                assert table.cursor_row == 2
+
+                await pilot.press("k")
+                assert table.cursor_row == 1
+
+    asyncio.run(_async_run())
