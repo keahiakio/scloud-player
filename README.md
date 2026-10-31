@@ -242,6 +242,14 @@ This project is built on the shoulders of giants across the open source communit
 
 ---
 
+## Contributing & Community
+
+Contributions, bug reports, and UX suggestions are welcome! Check out [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture details, and pull request procedures. All participants are expected to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+For vulnerability reporting, please review our [Security Policy](SECURITY.md).
+
+---
+
 ## License & Compliance
 
 ### Dual License
